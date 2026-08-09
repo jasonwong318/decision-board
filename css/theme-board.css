@@ -1,0 +1,44 @@
+/* "Physical board" theme — the red 40x40 panel with routed grooves. */
+
+:root[data-theme="board"] {
+  --bg: #1a1013;
+  --surface: #2a1a1e;
+  --surface-hover: #37232a;
+  --sheet: #241519;
+  --border: #4a2c34;
+
+  --text: #fdf3f2;
+  --text-dim: #d9b9bd;
+  --text-faint: #a68288;
+
+  --accent: #e01f3d;
+  --accent-text: #fff6f7;
+  --accent-halo: rgba(224, 31, 61, 0.28);
+  --focus: #ffc9d2;
+  --danger: #ff8f9e;
+
+  --toast: #f4e6e8;
+  --toast-text: #24151a;
+
+  /* board panel */
+  --panel: #c8102e;
+  --panel-edge: #8d0a20;
+  --groove: #3d1119;
+  --groove-floor: #57202a;
+  --peg: #7d1d2c;
+  --bin-well: #35111a;
+  --bin-text: #f6dfe3;
+  --bin-text-won: #ffffff;
+  --ball: #e9eaec;
+  --ball-edge: #8d9099;
+  --wordmark: #2f0d15;
+}
+
+:root[data-theme="board"] .board-wordmark { opacity: 0.72; }
+
+/* The routed groove reads best with a hard shadow line under the top edge. */
+:root[data-theme="board"] .channel-floor { stroke-opacity: 0.92; }
+
+:root[data-theme="board"] .board-panel {
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.5));
+}
