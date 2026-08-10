@@ -14,12 +14,35 @@ const app = $('app');
 const optionList = $('option-list');
 const rowTemplate = $('option-row-template');
 
-let board = null;      // { layout, ball, binNodes }
+/**
+ * Beats either side of the drop itself. The pause before the ball is released
+ * and the silence after it lands are what turn a random draw into a verdict —
+ * both are skipped entirely when the user has asked for reduced motion.
+ */
+const CHARGE_MS = 620;
+const HOLD_MS = 780;
+
+const THEME_COLORS = { ritual: '#0b0a09', ivory: '#f3f0e8' };
+const THEME_NAMES = { ritual: 'nav.themeRitual', ivory: 'nav.themeIvory' };
+
+let board = null;      // { layout, ball, binNodes, pegNodes, bins }
 let currentOptions = [];
 let dropping = false;
 let skipController = null;
 
 /* ------------------------------------------------------------ helpers */
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A haptic tick per fork, where the platform has one. Never load-bearing. */
+function tick() {
+  if (prefersReducedMotion()) return;
+  try {
+    navigator.vibrate?.(6);
+  } catch {
+    /* unsupported, blocked, or the user has it off — all fine */
+  }
+}
 
 let toastTimer = 0;
 function toast(message) {
@@ -37,6 +60,13 @@ function openSheet(overlay) {
 
 function closeSheet(overlay) {
   overlay.hidden = true;
+  // Dismissing the verdict is what brings the room back up.
+  if (overlay.id === 'result-overlay') endCeremony();
+}
+
+function endCeremony() {
+  document.body.classList.remove('is-ceremony');
+  app.classList.remove('is-ceremony', 'is-charging', 'is-rolling');
 }
 
 function showScreen(name) {
@@ -127,7 +157,18 @@ function buildBoard() {
 }
 
 function clearWinner() {
+  board.bins.classList.remove('has-winner');
   for (const node of board.binNodes) node.classList.remove('is-won');
+  app.classList.remove('is-settled');
+}
+
+/** Flash the peg the ball has just committed to. -1 means "no fork here". */
+function strikePeg(index) {
+  const peg = index >= 0 ? board?.pegNodes[index] : null;
+  if (!peg) return;
+  peg.classList.add('is-struck');
+  setTimeout(() => peg.classList.remove('is-struck'), 110);
+  tick();
 }
 
 async function dropBall() {
@@ -137,19 +178,37 @@ async function dropBall() {
 
   const drawer = $('btn-drop');
   drawer.disabled = true;
-  drawer.textContent = t('board.dropping');
-  app.classList.add('is-rolling');
+  drawer.textContent = t('board.charging');
 
+  // The room dims and the board is the only lit thing left.
+  document.body.classList.add('is-ceremony');
+  app.classList.add('is-ceremony', 'is-charging');
+
+  // The draw happens here, before a single pixel moves — everything below is a
+  // replay, which is why skipping it cannot change the outcome.
   const result = drop(currentOptions.length);
   const route = ballRoute(currentOptions.length, result.bits);
 
   placeBall(board.ball, board.layout.entry.x, board.layout.entry.y);
+  if (!prefersReducedMotion()) await wait(CHARGE_MS);
+
+  app.classList.remove('is-charging');
+  app.classList.add('is-rolling');
+  drawer.textContent = t('board.dropping');
 
   skipController = new AbortController();
-  await animateBall(board.ball, route, { signal: skipController.signal });
+  await animateBall(board.ball, route, {
+    signal: skipController.signal,
+    onStageEnd: (stage) => strikePeg(route.pegs[stage]),
+  });
   skipController = null;
 
+  app.classList.remove('is-rolling');
+  app.classList.add('is-settled');
+
+  board.bins.classList.add('has-winner');
   board.binNodes[result.binIndex].classList.add('is-won');
+  tick();
 
   const label = result.isRetry ? null : currentOptions[result.optionIndex];
   $('live').textContent = result.isRetry
@@ -157,11 +216,13 @@ async function dropBall() {
     : t('a11y.resultAnnounce', { label });
 
   pushHistory({ question: store.question, label, isRetry: result.isRetry });
+
+  // Let the winning bin burn on its own for a beat before naming it.
+  if (!prefersReducedMotion()) await wait(HOLD_MS);
   showResult(result, label);
 
   drawer.disabled = false;
   drawer.textContent = t('board.drop');
-  app.classList.remove('is-rolling');
   dropping = false;
 }
 
@@ -172,7 +233,7 @@ function showResult(result, label) {
   $('result-body').hidden = !result.isRetry;
   $('btn-again').textContent = result.isRetry ? t('result.dropAgain') : t('result.again');
 
-  const card = $('result-overlay').querySelector('.result-card');
+  const card = $('result-overlay').querySelector('.verdict');
   card.style.setProperty('--bin-color', binColor(result.bin));
   card.classList.toggle('is-retry', result.isRetry);
 
@@ -245,9 +306,15 @@ function renderHistory() {
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  $('btn-theme').textContent = theme === 'board' ? '◐' : '◑';
-  const color = theme === 'board' ? '#c8102e' : '#0f172a';
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', color);
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', THEME_COLORS[theme]);
+
+  // The control is a toggle, so it should say where it takes you, not where you are.
+  const next = theme === 'ritual' ? 'ivory' : 'ritual';
+  const button = $('btn-theme');
+  button.textContent = theme === 'ritual' ? '◐' : '◑';
+  const label = t('nav.themeSwitch', { name: t(THEME_NAMES[next]) });
+  button.title = label;
+  button.setAttribute('aria-label', label);
 }
 
 function applyLang(lang) {
@@ -259,6 +326,9 @@ function applyLang(lang) {
     $('board-question').textContent = store.question || t('app.tagline');
     $('btn-drop').textContent = t('board.drop');
   }
+  // setLang re-ran the translations, which would have flattened the theme
+  // button's label back to the generic one.
+  applyTheme(store.theme);
 }
 
 /* ------------------------------------------------------------- init */
@@ -302,8 +372,10 @@ function wireEvents() {
     }
   });
 
+  // Straight back into another drop, so the ceremony is never torn down and
+  // rebuilt between two rounds.
   $('btn-again').addEventListener('click', () => {
-    closeSheet($('result-overlay'));
+    $('result-overlay').hidden = true;
     dropBall();
   });
   $('btn-result-close').addEventListener('click', () => closeSheet($('result-overlay')));
@@ -326,7 +398,7 @@ function wireEvents() {
   $('btn-history-close').addEventListener('click', () => closeSheet($('history-overlay')));
 
   $('btn-theme').addEventListener('click', () => {
-    const next = store.theme === 'board' ? 'modern' : 'board';
+    const next = store.theme === 'ritual' ? 'ivory' : 'ritual';
     store.setTheme(next);
     applyTheme(next);
   });

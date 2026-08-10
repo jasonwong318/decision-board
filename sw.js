@@ -3,15 +3,16 @@
  * cache-first; the version string is what invalidates an old install.
  */
 
-const VERSION = 'decision-board-v1';
+const VERSION = 'decision-board-v2';
 
 const ASSETS = [
   '.',
   'index.html',
   'app.webmanifest',
+  'css/tokens.css',
   'css/base.css',
-  'css/theme-board.css',
-  'css/theme-modern.css',
+  'css/theme-ritual.css',
+  'css/theme-ivory.css',
   'js/main.js',
   'js/tree.js',
   'js/rng.js',

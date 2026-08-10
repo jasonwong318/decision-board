@@ -13,14 +13,23 @@
 
 import { shapeFor, binsFor } from './tree.js';
 
-export const VIEW = { w: 1000, h: 1000 };
+/**
+ * Portrait, not square: the descent is the ceremony, so the board is given the
+ * room to make it feel like one.
+ */
+export const VIEW = { w: 1000, h: 1240 };
 
-const PAD = 34;          // board edge -> playable area
-const ENTRY_Y = 118;     // where the ball is released
-const FIRST_ROW_Y = 208; // the single top fork
-const LAST_ROW_Y = 742;  // the bottom row of forks
-const BIN_TOP = 772;
-const BIN_BOTTOM = 952;
+export const PANEL = { x: 10, y: 10, w: 980, h: 1220, r: 30 };
+
+/** The nameplate at the foot of each bin, and the shelf the ball rests on. */
+export const PLATE = { h: 32, gap: 8 };
+
+const PAD = 40;          // board edge -> playable area
+const ENTRY_Y = 176;     // where the ball is released
+const FIRST_ROW_Y = 288; // the single top fork
+const LAST_ROW_Y = 946;  // the bottom row of forks
+const BIN_TOP = 1006;
+const BIN_BOTTOM = 1174;
 const STUB = 0.24;       // share of the row gap spent going straight down
 
 const INNER_W = VIEW.w - PAD * 2;
@@ -148,27 +157,40 @@ export function buildLayout(k) {
  * polyline; the animator eases through them one at a time so the ball visibly
  * hesitates at every fork.
  *
+ * `pegs[i]` is the index — into the flat `layout.pegs` array — of the peg the
+ * ball reaches at the end of stage `i`, or -1 for the final drop into the bin.
+ * The renderer uses it to make each fork flash as the ball commits to it.
+ *
  * @param {number} k
  * @param {(0|1)[]} bits one per fork, 0 = left
- * @returns {{stages:{x:number,y:number}[][], rest:{x:number,y:number}}}
+ * @returns {{stages:{x:number,y:number}[][], pegs:number[], rest:{x:number,y:number}}}
  */
 export function ballRoute(k, bits) {
   const { depth } = shapeFor(k);
   const ys = rowYs(depth);
   const centre = PAD + INNER_W / 2;
 
+  // Pegs are emitted level by level, so level L occupies 2^L slots starting
+  // at 2^L - 1. Stage 0 lands the ball on the single peg of level 0.
+  const pegIndex = (level, index) => 2 ** level - 1 + index;
+
   const stages = [[{ x: centre, y: ENTRY_Y }, { x: centre, y: ys[0] }]];
+  const pegs = [pegIndex(0, 0)];
 
   let index = 0;
   for (let level = 0; level < depth; level++) {
     const x = nodeX(level, index);
     index = index * 2 + bits[level];
     stages.push(forkPoints(x, ys[level], nodeX(level + 1, index), ys[level + 1]));
+    pegs.push(level + 1 < depth ? pegIndex(level + 1, index) : -1);
   }
 
+  // The ball comes to rest on the nameplate, not floating in the well.
   const exitX = nodeX(depth, index);
-  const rest = { x: exitX, y: BIN_BOTTOM - grooveMetrics(2 ** depth).ballR - 14 };
+  const plateTop = BIN_BOTTOM - PLATE.gap - PLATE.h;
+  const rest = { x: exitX, y: plateTop - grooveMetrics(2 ** depth).ballR + 2 };
   stages.push([{ x: exitX, y: ys[depth] }, rest]);
+  pegs.push(-1);
 
-  return { stages, rest };
+  return { stages, pegs, rest };
 }

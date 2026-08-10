@@ -50,6 +50,27 @@ then drives the real `drop()` through 1,000,000 draws with the real crypto bit
 source and chi-square tests the result, which is what would catch an off-by-one
 between the RNG and the exit mapping.
 
+## The drop is a ceremony
+
+A fair draw that resolves in a popup feels like a coin flip you did not watch,
+so the result is staged rather than announced. Pressing the button dims the
+whole page to a vignette and leaves the board as the only lit object; the
+release point pulses while nothing happens; the ball takes a beat at each fork
+and the peg it commits to flashes as it passes; the winning bin ignites and the
+others fall away; and only after a held silence does the verdict name the
+answer, one line at a time.
+
+None of it touches the draw. `drop()` has already returned before the first
+pixel moves — the whole sequence is a replay, which is why tapping the board to
+skip it cannot change what it says. `prefers-reduced-motion` removes the pauses
+and the descent entirely and goes straight to the verdict.
+
+The two themes are the same instrument in different materials, and share every
+token in `css/tokens.css` — only the palette differs. Option colours are CSS
+custom properties rather than fixed hex values, because a colour luminous enough
+against obsidian is unreadable on paper: the *index* is the option's identity,
+and each theme cuts its own value for it.
+
 ## Running it locally
 
 ```bash
@@ -73,9 +94,10 @@ set **Settings → Pages → Source** to **GitHub Actions** once, and
 index.html            single page: setup screen, board, sheets
 app.webmanifest       PWA manifest
 sw.js                 offline cache (cache-first, versioned)
+css/tokens.css        type, space, radii and motion — shared by both themes
 css/base.css          structure and components
-css/theme-board.css   "physical board" theme — the red panel
-css/theme-modern.css  "modern" theme, follows OS light/dark
+css/theme-ritual.css  "Ritual" — obsidian and brass, the default
+css/theme-ivory.css   "Ivory" — paper and ink, for daylight
 js/tree.js            board shapes, exit -> option mapping, drop()
 js/rng.js             crypto-backed fair bit source
 js/layout.js          geometry: node positions, grooves, ball route
@@ -92,7 +114,7 @@ tools/make-icons.py   regenerates icons/ (needs Pillow)
 ## Features
 
 - 2–5 options, optional question, bilingual UI (繁體中文 / English)
-- Two themes: the red physical board, or a modern light/dark interface
+- Two themes: Ritual (obsidian and brass) and Ivory (paper and ink)
 - Installable and fully offline after first load
 - Share a board as a link (`?q=…&o=…&o=…`); options never leave the device otherwise
 - Local history of past decisions

@@ -10,13 +10,26 @@ import { MIN_OPTIONS, MAX_OPTIONS } from './tree.js';
 const KEY = 'decision-board:v1';
 export const MAX_LABEL_LEN = 60;
 
-export const OPTION_COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
-export const RETRY_COLOR = '#94a3b8';
+/**
+ * Option identities are CSS custom properties rather than literal hex, because
+ * the two themes need different values for the same hue: a colour luminous
+ * enough on obsidian is unreadable on paper. The index is the identity; the
+ * theme decides what it looks like.
+ */
+export const OPTION_COLORS = [
+  'var(--opt-0)', 'var(--opt-1)', 'var(--opt-2)', 'var(--opt-3)', 'var(--opt-4)',
+];
+export const RETRY_COLOR = 'var(--opt-retry)';
+
+export const THEMES = ['ritual', 'ivory'];
+
+/** Themes were once named after the physical board they imitated. */
+const LEGACY_THEMES = { board: 'ritual', modern: 'ivory' };
 
 const DEFAULTS = {
   question: '',
   options: ['', ''],
-  theme: 'board',
+  theme: 'ritual',
   lang: null,
 };
 
@@ -81,7 +94,7 @@ export const store = {
     return state.options.slice();
   },
   get theme() {
-    return state.theme;
+    return LEGACY_THEMES[state.theme] || (THEMES.includes(state.theme) ? state.theme : 'ritual');
   },
   get lang() {
     return state.lang;
@@ -93,7 +106,7 @@ export const store = {
     persist();
   },
   setTheme(theme) {
-    state.theme = theme === 'modern' ? 'modern' : 'board';
+    state.theme = THEMES.includes(theme) ? theme : 'ritual';
     persist();
   },
   setLang(lang) {

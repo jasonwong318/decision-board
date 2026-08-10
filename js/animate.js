@@ -4,14 +4,20 @@
  * The route is decided up-front by tree.js, so the animation is a replay of a
  * draw that already happened — speeding it up or skipping it cannot change the
  * outcome.
+ *
+ * The pacing is deliberate rather than brisk: each fork gets a beat of its own
+ * so the ball reads as *deciding*, and the drop into the bin lands with a short
+ * settle instead of stopping dead.
  */
 
 import { placeBall } from './render.js';
 
-const FIRST_STAGE_MS = 300;
-const FORK_STAGE_MS = 340;
-const DROP_STAGE_MS = 420;
-const FORK_PAUSE_MS = 70;
+const FIRST_STAGE_MS = 340;
+const FORK_STAGE_MS = 330;
+const DROP_STAGE_MS = 460;
+const FORK_PAUSE_MS = 80;
+const SETTLE_MS = 240;
+const SETTLE_RISE = 9; // how far the ball rebounds out of the well, in view units
 
 export function prefersReducedMotion() {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -23,6 +29,11 @@ function easeInOut(t) {
 
 function easeIn(t) {
   return t * t;
+}
+
+/** One rebound, decaying — a half sine is enough to sell the weight. */
+function settleOffset(t) {
+  return Math.sin(t * Math.PI) * (1 - t) * SETTLE_RISE;
 }
 
 /**
@@ -58,13 +69,14 @@ function pointAt(points, t) {
 }
 
 /**
- * @param {SVGCircleElement} ball
+ * @param {SVGGElement} ball
  * @param {{stages:{x:number,y:number}[][], rest:{x:number,y:number}}} route
- * @param {{signal?:AbortSignal, onSettled?:() => void}} [opts]
+ * @param {{signal?:AbortSignal, onStageEnd?:(stageIndex:number) => void}} [opts]
  * @returns {Promise<void>} resolves once the ball has settled
  */
 export function animateBall(ball, route, opts = {}) {
-  const { signal } = opts;
+  const { signal, onStageEnd } = opts;
+  const stageCount = route.stages.length;
 
   if (prefersReducedMotion()) {
     placeBall(ball, route.rest.x, route.rest.y);
@@ -74,32 +86,47 @@ export function animateBall(ball, route, opts = {}) {
   return new Promise((resolve) => {
     let stageIndex = 0;
     let stageStart = null;
+    let settling = false;
     let frame = 0;
+
+    const done = () => {
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
 
     const finish = () => {
       cancelAnimationFrame(frame);
       placeBall(ball, route.rest.x, route.rest.y);
-      signal?.removeEventListener('abort', finish);
-      resolve();
+      done();
     };
 
     signal?.addEventListener('abort', finish, { once: true });
 
     const stageDuration = (i) => {
       if (i === 0) return FIRST_STAGE_MS;
-      if (i === route.stages.length - 1) return DROP_STAGE_MS;
+      if (i === stageCount - 1) return DROP_STAGE_MS;
       // Later forks run slightly quicker, so the ball reads as accelerating.
-      const progress = i / route.stages.length;
-      return FORK_STAGE_MS * (1 - progress * 0.35) + FORK_PAUSE_MS;
+      return FORK_STAGE_MS * (1 - (i / stageCount) * 0.35) + FORK_PAUSE_MS;
     };
 
     const step = (now) => {
       if (signal?.aborted) return;
       if (stageStart === null) stageStart = now;
 
-      const isLast = stageIndex === route.stages.length - 1;
-      const duration = stageDuration(stageIndex);
-      const raw = Math.min((now - stageStart) / duration, 1);
+      if (settling) {
+        const raw = Math.min((now - stageStart) / SETTLE_MS, 1);
+        placeBall(ball, route.rest.x, route.rest.y - settleOffset(raw));
+        if (raw < 1) {
+          frame = requestAnimationFrame(step);
+          return;
+        }
+        placeBall(ball, route.rest.x, route.rest.y);
+        done();
+        return;
+      }
+
+      const isLast = stageIndex === stageCount - 1;
+      const raw = Math.min((now - stageStart) / stageDuration(stageIndex), 1);
       const eased = isLast ? easeIn(raw) : easeInOut(raw);
       const { x, y } = pointAt(route.stages[stageIndex], eased);
       placeBall(ball, x, y);
@@ -109,13 +136,10 @@ export function animateBall(ball, route, opts = {}) {
         return;
       }
 
+      onStageEnd?.(stageIndex);
       stageIndex += 1;
       stageStart = null;
-      if (stageIndex >= route.stages.length) {
-        signal?.removeEventListener('abort', finish);
-        resolve();
-        return;
-      }
+      if (stageIndex >= stageCount) settling = true;
       frame = requestAnimationFrame(step);
     };
 

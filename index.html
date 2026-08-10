@@ -1,47 +1,56 @@
 <!DOCTYPE html>
-<html lang="zh-Hant" data-theme="board">
+<html lang="zh-Hant" data-theme="ritual">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>決策板 Decision Board</title>
 <meta name="description" content="A provably fair decision board — drop a ball, let it pick between your options.">
-<meta name="theme-color" content="#c8102e">
-<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0b0a09">
+<meta name="color-scheme" content="dark light">
 <link rel="manifest" href="app.webmanifest">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="決策板">
+<link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/base.css">
-<link rel="stylesheet" href="css/theme-board.css">
-<link rel="stylesheet" href="css/theme-modern.css">
+<link rel="stylesheet" href="css/theme-ritual.css">
+<link rel="stylesheet" href="css/theme-ivory.css">
 </head>
 <body>
+
+<div class="grain" aria-hidden="true"></div>
 
 <div class="app" id="app" data-screen="setup">
 
   <header class="topbar">
     <div class="brand">
-      <span class="brand-dot" aria-hidden="true"></span>
-      <span data-i18n="app.name"></span>
+      <!-- A ball above the chute it is about to fall into. -->
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="6.5" r="2.9" class="brand-ball"/>
+        <path d="M5.5 10.5 V13 L12 20 L18.5 13 V10.5" class="brand-fork"/>
+      </svg>
+      <span class="brand-name" data-i18n="app.name"></span>
     </div>
-    <div class="topbar-actions">
+    <nav class="topbar-actions">
       <button type="button" class="icon-btn" id="btn-fair" data-i18n-attr="title:nav.fair,aria-label:nav.fair">?</button>
       <button type="button" class="icon-btn" id="btn-history" data-i18n-attr="title:nav.history,aria-label:nav.history">☰</button>
-      <button type="button" class="icon-btn" id="btn-theme" data-i18n-attr="title:nav.theme,aria-label:nav.theme">◐</button>
+      <!-- Labelled from JS: the toggle names the theme it switches *to*. -->
+      <button type="button" class="icon-btn" id="btn-theme">◐</button>
       <button type="button" class="icon-btn icon-btn-text" id="btn-lang" data-i18n-attr="title:nav.lang,aria-label:nav.lang">EN</button>
-    </div>
+    </nav>
   </header>
 
   <main>
     <!-- ------------------------------------------------------- setup -->
     <section class="screen" id="screen-setup" aria-labelledby="setup-heading">
-      <h1 id="setup-heading" data-i18n="app.tagline"></h1>
+      <p class="eyebrow" data-i18n="setup.eyebrow"></p>
+      <h1 id="setup-heading" class="display" data-i18n="app.tagline"></h1>
 
       <form id="setup-form" novalidate>
         <label class="field">
           <span class="field-label" data-i18n="setup.question"></span>
-          <input type="text" id="question" maxlength="60" autocomplete="off"
+          <input type="text" id="question" class="rule-input" maxlength="60" autocomplete="off"
                  data-i18n-attr="placeholder:setup.questionPlaceholder">
         </label>
 
@@ -60,9 +69,12 @@
     <!-- ------------------------------------------------------- board -->
     <section class="screen" id="screen-board" aria-labelledby="board-question">
       <div class="board-head">
-        <button type="button" class="ghost" id="btn-edit" data-i18n="board.edit"></button>
-        <h1 id="board-question"></h1>
-        <button type="button" class="ghost" id="btn-share" data-i18n="board.share"></button>
+        <div class="board-head-row">
+          <button type="button" class="quiet" id="btn-edit" data-i18n="board.edit"></button>
+          <button type="button" class="quiet" id="btn-share" data-i18n="board.share"></button>
+        </div>
+        <p class="eyebrow" data-i18n="board.eyebrow"></p>
+        <h1 id="board-question" class="display"></h1>
       </div>
 
       <div class="board-wrap">
@@ -80,15 +92,18 @@
 
   <p class="sr-only" id="live" aria-live="polite"></p>
 
-  <!-- ------------------------------------------------------- result -->
-  <div class="overlay" id="result-overlay" hidden>
-    <div class="sheet result-card" role="dialog" aria-modal="true" aria-labelledby="result-label">
-      <p class="result-kicker" id="result-kicker"></p>
-      <p class="result-label" id="result-label"></p>
-      <p class="result-body" id="result-body"></p>
-      <div class="sheet-actions">
-        <button type="button" class="primary" id="btn-again"></button>
-        <button type="button" class="ghost" id="btn-result-close" data-i18n="result.close"></button>
+  <!-- ------------------------------------------------------- verdict -->
+  <div class="overlay overlay-verdict" id="result-overlay" hidden>
+    <div class="verdict" role="dialog" aria-modal="true" aria-labelledby="result-label">
+      <span class="verdict-rule" aria-hidden="true"></span>
+      <p class="eyebrow verdict-kicker" id="result-kicker"></p>
+      <p class="verdict-label" id="result-label"></p>
+      <p class="verdict-note" id="result-body"></p>
+      <span class="verdict-rule verdict-rule-end" aria-hidden="true"></span>
+      <!-- Deliberately not the loud button: on this screen the answer is the hero. -->
+      <div class="verdict-actions">
+        <button type="button" class="ghost" id="btn-again"></button>
+        <button type="button" class="quiet" id="btn-result-close" data-i18n="result.close"></button>
       </div>
     </div>
   </div>
@@ -96,7 +111,8 @@
   <!-- ----------------------------------------------------- fairness -->
   <div class="overlay" id="fair-overlay" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fair-title">
-      <h2 id="fair-title" data-i18n="fair.title"></h2>
+      <p class="eyebrow" data-i18n="fair.eyebrow"></p>
+      <h2 id="fair-title" class="display" data-i18n="fair.title"></h2>
       <p class="sheet-body" data-i18n="fair.body"></p>
       <p class="hint" id="fair-exits"></p>
       <table class="odds" id="odds-table"></table>
@@ -109,7 +125,8 @@
   <!-- ------------------------------------------------------ history -->
   <div class="overlay" id="history-overlay" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title">
-      <h2 id="history-title" data-i18n="history.title"></h2>
+      <p class="eyebrow" data-i18n="history.eyebrow"></p>
+      <h2 id="history-title" class="display" data-i18n="history.title"></h2>
       <ul class="history-list" id="history-list"></ul>
       <div class="sheet-actions">
         <button type="button" class="ghost" id="btn-history-clear" data-i18n="history.clear"></button>
@@ -126,7 +143,7 @@
 <template id="option-row-template">
   <li class="option-row">
     <span class="option-key" aria-hidden="true"></span>
-    <input type="text" class="option-input" maxlength="60" autocomplete="off">
+    <input type="text" class="option-input rule-input" maxlength="60" autocomplete="off">
     <button type="button" class="icon-btn remove-btn" data-i18n-attr="title:setup.remove,aria-label:setup.remove">×</button>
   </li>
 </template>
