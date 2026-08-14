@@ -12,6 +12,7 @@
  */
 
 import { shapeFor, binsFor } from './tree.js';
+import { CLASSIC_ROWS, CLASSIC_EXITS, classicBins } from './classic.js';
 
 /**
  * Portrait, not square: the descent is the ceremony, so the board is given the
@@ -81,8 +82,8 @@ function rowYs(depth) {
  * The groove connecting a parent node to one of its children.
  * Shared by the renderer and the animator so the ball can never drift off it.
  */
-function forkPoints(x0, y0, x1, y1) {
-  const stub = (y1 - y0) * STUB;
+function forkPoints(x0, y0, x1, y1, share = STUB) {
+  const stub = (y1 - y0) * share;
   return [
     { x: x0, y: y0 },
     { x: x0, y: y0 + stub },
@@ -139,6 +140,9 @@ export function buildLayout(k) {
   }));
 
   return {
+    view: VIEW,
+    panel: PANEL,
+    plate: PLATE,
     depth,
     exits,
     ys,
@@ -150,6 +154,161 @@ export function buildLayout(k) {
     binBottom: BIN_BOTTOM,
     ...grooveMetrics(exits),
   };
+}
+
+/* ------------------------------------------------------------- classic */
+
+/**
+ * The classic board is square, because the object is: a 40 × 40 panel.
+ */
+export const CLASSIC_VIEW = { w: 1000, h: 1000 };
+export const CLASSIC_PANEL = { x: 10, y: 10, w: 980, h: 980, r: 26 };
+export const CLASSIC_PLATE = { h: 26, gap: 10 };
+
+const C_PAD = 70;
+const C_ENTRY_Y = 150;
+const C_FIRST_ROW_Y = 244;
+const C_LAST_ROW_Y = 664;
+const C_BIN_TOP = 726;
+const C_BIN_BOTTOM = 906;
+/** Most of each drop is spent going straight, which flattens the runs. */
+const C_STUB = 0.42;
+
+const C_INNER_W = CLASSIC_VIEW.w - C_PAD * 2;
+/** Spacing between nodes on the same row; a fork moves the ball half of it. */
+const C_STEP = C_INNER_W / CLASSIC_EXITS;
+const C_CENTRE = C_PAD + C_INNER_W / 2;
+
+/**
+ * The maze is milled across the whole panel, so every row is drawn full width
+ * on a fixed grid — alternate rows offset by half a step, which is what gives
+ * the toy its dense field of interlocking horizontal runs.
+ *
+ * The ball only ever reaches a triangle inside that field: entering at the
+ * centre and moving half a step per row, after six rows it can be at any of
+ * seven exits. The slots it never touches are milled all the same, exactly as
+ * they are on the object.
+ */
+function classicRowOffset(level) {
+  return level % 2 === 0 ? 0 : 0.5;
+}
+
+/** Node x for the grid slot `m` on `level`; m counts out from the centre. */
+function classicNodeX(level, m) {
+  return C_CENTRE + (m + classicRowOffset(level)) * C_STEP;
+}
+
+/** Every grid slot on a row that fits inside the playable area. */
+function classicRowSlots(level) {
+  const offset = classicRowOffset(level);
+  const reach = C_INNER_W / 2;
+  const slots = [];
+  for (let m = -CLASSIC_EXITS; m <= CLASSIC_EXITS; m++) {
+    // A half-step of tolerance keeps the outermost node on an offset row from
+    // being dropped for a rounding error at exactly the edge.
+    if (Math.abs((m + offset) * C_STEP) <= reach + 0.01) slots.push(m);
+  }
+  return slots;
+}
+
+function classicRowYs() {
+  const gap = (C_LAST_ROW_Y - C_FIRST_ROW_Y) / CLASSIC_ROWS;
+  return Array.from({ length: CLASSIC_ROWS + 1 }, (_, i) => C_FIRST_ROW_Y + gap * i);
+}
+
+/** Wide, chunky slots, like the milled channels on the panel. */
+function classicGrooveMetrics() {
+  const groove = Math.min(30, C_STEP * 0.24);
+  const floor = groove * 0.72;
+  return { groove, floor, ballR: Math.max(7, floor * 0.75) };
+}
+
+/** The ball's grid slot after `rights` right-steps, from a centre entry. */
+function classicExitSlot(rights) {
+  return rights - CLASSIC_ROWS / 2;
+}
+
+/** @returns {object} the same shape buildLayout returns, minus the pegs. */
+export function buildClassicLayout() {
+  const ys = classicRowYs();
+
+  const segments = [`M ${C_CENTRE} ${C_ENTRY_Y} L ${C_CENTRE} ${ys[0]}`];
+
+  for (let level = 0; level < CLASSIC_ROWS; level++) {
+    const below = new Set(classicRowSlots(level + 1));
+    const shift = classicRowOffset(level) - classicRowOffset(level + 1);
+    for (const m of classicRowSlots(level)) {
+      const x = classicNodeX(level, m);
+      // A fork moves half a step either way; on the grid that is these two.
+      for (const child of [m + shift - 0.5, m + shift + 0.5]) {
+        if (!below.has(child)) continue;
+        segments.push(toPath(
+          forkPoints(x, ys[level], classicNodeX(level + 1, child), ys[level + 1], C_STUB),
+        ));
+      }
+    }
+  }
+
+  for (let exit = 0; exit < CLASSIC_EXITS; exit++) {
+    const x = classicNodeX(CLASSIC_ROWS, classicExitSlot(exit));
+    segments.push(`M ${x} ${ys[CLASSIC_ROWS]} L ${x} ${C_BIN_TOP + 6}`);
+  }
+
+  const binWidth = C_INNER_W / CLASSIC_EXITS;
+  const bins = classicBins().map((bin, i) => ({
+    ...bin,
+    index: i,
+    x: C_PAD + bin.exitStart * binWidth,
+    width: bin.exitCount * binWidth,
+    y: C_BIN_TOP,
+    height: C_BIN_BOTTOM - C_BIN_TOP,
+  }));
+
+  return {
+    view: CLASSIC_VIEW,
+    panel: CLASSIC_PANEL,
+    plate: CLASSIC_PLATE,
+    depth: CLASSIC_ROWS,
+    exits: CLASSIC_EXITS,
+    ys,
+    channelPath: segments.join(' '),
+    pegs: [],
+    bins,
+    entry: { x: C_CENTRE, y: C_ENTRY_Y },
+    binTop: C_BIN_TOP,
+    binBottom: C_BIN_BOTTOM,
+    ...classicGrooveMetrics(),
+  };
+}
+
+/**
+ * The classic ball's route. `pegs` is all -1: the real panel has no pins in the
+ * maze, only the three rivets at the exits, so there is nothing to strike.
+ *
+ * @param {(0|1)[]} bits one per row, 1 = step right
+ * @returns {{stages:{x:number,y:number}[][], pegs:number[], rest:{x:number,y:number}}}
+ */
+export function classicRoute(bits) {
+  const ys = classicRowYs();
+
+  const stages = [[{ x: C_CENTRE, y: C_ENTRY_Y }, { x: C_CENTRE, y: ys[0] }]];
+
+  // The ball starts on the centre slot and shifts half a step per row. Slots
+  // are tracked in grid units, so a left then a right returns it to exactly
+  // where a right then a left would have — that is the merging, in one line.
+  let slot = 0;
+  for (let level = 0; level < CLASSIC_ROWS; level++) {
+    const x = classicNodeX(level, slot);
+    slot += (bits[level] ? 0.5 : -0.5) + classicRowOffset(level) - classicRowOffset(level + 1);
+    stages.push(forkPoints(x, ys[level], classicNodeX(level + 1, slot), ys[level + 1], C_STUB));
+  }
+
+  const exitX = classicNodeX(CLASSIC_ROWS, slot);
+  const plateTop = C_BIN_BOTTOM - CLASSIC_PLATE.gap - CLASSIC_PLATE.h;
+  const rest = { x: exitX, y: plateTop - classicGrooveMetrics().ballR + 2 };
+  stages.push([{ x: exitX, y: ys[CLASSIC_ROWS] }, rest]);
+
+  return { stages, pegs: stages.map(() => -1), rest };
 }
 
 /**

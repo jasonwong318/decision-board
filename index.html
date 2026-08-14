@@ -16,12 +16,13 @@
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/theme-ritual.css">
 <link rel="stylesheet" href="css/theme-ivory.css">
+<link rel="stylesheet" href="css/board-classic.css">
 </head>
 <body>
 
 <div class="grain" aria-hidden="true"></div>
 
-<div class="app" id="app" data-screen="setup">
+<div class="app" id="app" data-screen="mode" data-mode="evolved">
 
   <header class="topbar">
     <div class="brand">
@@ -42,8 +43,51 @@
   </header>
 
   <main>
+    <!-- -------------------------------------------------------- mode -->
+    <section class="screen" id="screen-mode" aria-labelledby="mode-heading">
+      <p class="eyebrow" data-i18n="mode.eyebrow"></p>
+      <h1 id="mode-heading" class="display" data-i18n="mode.heading"></h1>
+
+      <ul class="mode-list">
+        <li>
+          <button type="button" class="mode-card" id="btn-mode-classic">
+            <!-- Three rows that converge: two channels arriving at one node. -->
+            <svg class="mode-thumb" viewBox="0 0 64 44" aria-hidden="true" focusable="false">
+              <path class="mode-thumb-line" d="M32 4 V10
+                M32 10 L16 22 M32 10 L48 22
+                M16 22 L8 34 M16 22 L32 34
+                M48 22 L32 34 M48 22 L56 34"/>
+              <circle class="mode-thumb-merge" cx="32" cy="34" r="3.4"/>
+            </svg>
+            <span class="mode-card-body">
+              <span class="eyebrow mode-tag" data-i18n="mode.classicTag"></span>
+              <span class="mode-name display" data-i18n="mode.classicName"></span>
+              <span class="mode-desc" data-i18n="mode.classicBody"></span>
+            </span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="mode-card" id="btn-mode-evolved">
+            <!-- The same three rows, splitting only: eight separate endings. -->
+            <svg class="mode-thumb" viewBox="0 0 64 44" aria-hidden="true" focusable="false">
+              <path class="mode-thumb-line" d="M32 4 V10
+                M32 10 L16 22 M32 10 L48 22
+                M16 22 L8 34 M16 22 L24 34
+                M48 22 L40 34 M48 22 L56 34"/>
+            </svg>
+            <span class="mode-card-body">
+              <span class="eyebrow mode-tag" data-i18n="mode.evolvedTag"></span>
+              <span class="mode-name display" data-i18n="mode.evolvedName"></span>
+              <span class="mode-desc" data-i18n="mode.evolvedBody"></span>
+            </span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
     <!-- ------------------------------------------------------- setup -->
     <section class="screen" id="screen-setup" aria-labelledby="setup-heading">
+      <button type="button" class="quiet back-btn" id="btn-mode-back" data-i18n="mode.change"></button>
       <p class="eyebrow" data-i18n="setup.eyebrow"></p>
       <h1 id="setup-heading" class="display" data-i18n="app.tagline"></h1>
 
@@ -54,13 +98,18 @@
                  data-i18n-attr="placeholder:setup.questionPlaceholder">
         </label>
 
-        <div class="options-head">
-          <span class="field-label" data-i18n="setup.options"></span>
-          <span class="hint" data-i18n="setup.hint"></span>
+        <!-- The classic board's three outcomes are printed on the panel, so it
+             has nothing to configure beyond the question. -->
+        <div id="options-block">
+          <div class="options-head">
+            <span class="field-label" data-i18n="setup.options"></span>
+            <span class="hint" data-i18n="setup.hint"></span>
+          </div>
+          <ul class="option-list" id="option-list"></ul>
+          <button type="button" class="ghost add-btn" id="btn-add" data-i18n="setup.add"></button>
         </div>
-        <ul class="option-list" id="option-list"></ul>
 
-        <button type="button" class="ghost add-btn" id="btn-add" data-i18n="setup.add"></button>
+        <p class="classic-note" id="setup-classic-note" data-i18n="setup.classicNote" hidden></p>
         <p class="error" id="setup-error" role="alert"></p>
         <button type="submit" class="primary" id="btn-start" data-i18n="setup.start"></button>
       </form>
@@ -112,10 +161,11 @@
   <div class="overlay" id="fair-overlay" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fair-title">
       <p class="eyebrow" data-i18n="fair.eyebrow"></p>
-      <h2 id="fair-title" class="display" data-i18n="fair.title"></h2>
-      <p class="sheet-body" data-i18n="fair.body"></p>
+      <h2 id="fair-title" class="display"></h2>
+      <p class="sheet-body" id="fair-body"></p>
       <p class="hint" id="fair-exits"></p>
       <table class="odds" id="odds-table"></table>
+      <p class="hint fair-compare" id="fair-compare" hidden></p>
       <div class="sheet-actions">
         <button type="button" class="ghost" id="btn-fair-close" data-i18n="nav.close"></button>
       </div>

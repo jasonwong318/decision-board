@@ -1,13 +1,16 @@
 /**
- * Draws the board into an <svg>.
+ * Draws a board into an <svg>.
  *
- * Every colour is a CSS custom property — including the gradient stops — so the
- * two themes recut the same instrument without this file knowing about either.
- * Shape and material live here; state (winner, strike, charge) is expressed as
- * classes and animated in CSS.
+ * Two boards live here. The evolved board is a non-merging tree with a bin per
+ * option; the classic board is the physical toy — square, red, three slots,
+ * merging channels. They share every material in this file and differ only in
+ * geometry (layout.js) and in how the bottom edge is dressed.
+ *
+ * Every colour is a CSS custom property, including the gradient stops, so a
+ * theme swap recuts the instrument without this file knowing about either.
  */
 
-import { buildLayout, VIEW, PANEL, PLATE } from './layout.js';
+import { buildLayout, buildClassicLayout } from './layout.js';
 import { RETRY_BIN } from './tree.js';
 import { OPTION_COLORS, RETRY_COLOR } from './state.js';
 
@@ -21,11 +24,14 @@ function el(name, attrs = {}) {
   return node;
 }
 
+/** Classic bins carry their own glyph and colour; evolved bins derive theirs. */
 export function binLetter(bin) {
+  if (bin.glyph) return bin.glyph;
   return bin.kind === RETRY_BIN ? '↻' : String.fromCharCode(65 + bin.optionIndex);
 }
 
 export function binColor(bin) {
+  if (bin.color) return bin.color;
   return bin.kind === RETRY_BIN ? RETRY_COLOR : OPTION_COLORS[bin.optionIndex % OPTION_COLORS.length];
 }
 
@@ -51,7 +57,7 @@ function defs() {
     [1, 'var(--well-bottom)'],
   ]));
 
-  // Light lands top-left on every turned part, so pegs and ball share an origin.
+  // Light lands top-left on every turned part, so pegs, rivets and ball agree.
   node.append(gradient('radialGradient', 'db-peg', { cx: '35%', cy: '30%', r: '75%' }, [
     [0, 'var(--peg-hi)'],
     [0.55, 'var(--peg)'],
@@ -73,41 +79,144 @@ function defs() {
   return node;
 }
 
-/** The engraved faceplate: a letterspaced mark between two hairlines. */
-function faceplate() {
+/**
+ * Offsetting a second copy of the type by a pixel is what makes it read as cut
+ * into the panel rather than printed on it.
+ */
+function engraved(attrs, text, dy = 1.5) {
+  const group = el('g');
+  for (const [cls, offset] of [['board-wordmark-shadow', dy], ['', 0]]) {
+    const node = el('text', {
+      ...attrs,
+      class: `board-wordmark ${cls}`.trim(),
+      y: attrs.y + offset,
+    });
+    node.textContent = text;
+    group.append(node);
+  }
+  return group;
+}
+
+/** The evolved faceplate: a letterspaced mark centred between two hairlines. */
+function faceplate(view) {
   const group = el('g', { class: 'faceplate' });
-  const mid = VIEW.w / 2;
+  const mid = view.w / 2;
   const y = 78;
 
-  // Offsetting a second copy by a pixel is what makes the type read as cut into
-  // the panel rather than printed on it.
-  for (const [cls, dy] of [['board-wordmark-shadow', 1.5], ['', 0]]) {
-    const text = el('text', {
-      class: `board-wordmark ${cls}`.trim(), x: mid, y: y + dy, 'text-anchor': 'middle',
-      // Letter-spacing also trails the last glyph, so centring the advance box
-      // leaves the word visually half a space to the left. Put it back.
-      dx: 4.4,
-    });
-    text.textContent = 'DECISION';
-    group.append(text);
-  }
-
+  // Letter-spacing also trails the last glyph, so centring the advance box
+  // leaves the word visually half a space to the left. Put it back.
+  group.append(engraved({ x: mid, 'text-anchor': 'middle', dx: 4.4, y }, 'DECISION'));
   group.append(el('line', { class: 'board-rule', x1: 96, y1: y - 7, x2: mid - 130, y2: y - 7 }));
-  group.append(el('line', { class: 'board-rule', x1: mid + 130, y1: y - 7, x2: VIEW.w - 96, y2: y - 7 }));
+  group.append(el('line', { class: 'board-rule', x1: mid + 130, y1: y - 7, x2: view.w - 96, y2: y - 7 }));
+
+  return group;
+}
+
+/** The classic faceplate: the wordmark sits top-right, as it does on the toy. */
+function classicFaceplate(view, panel) {
+  const group = el('g', { class: 'faceplate' });
+  group.append(engraved(
+    { x: panel.x + panel.w - 46, 'text-anchor': 'end', y: 92, class: 'board-wordmark' },
+    'DECISION',
+    2,
+  ));
+  return group;
+}
+
+function channels(layout) {
+  const group = el('g', { class: 'channels' });
+  for (const cls of ['channel-cut', 'channel-floor', 'channel-sheen']) {
+    group.append(el('path', { class: `channel ${cls}`, d: layout.channelPath }));
+  }
+  return group;
+}
+
+function rivet(x, y, r) {
+  const group = el('g', { class: 'rivet', transform: `translate(${x} ${y})` });
+  group.append(el('circle', { class: 'peg-body', r }));
+  group.append(el('circle', { class: 'peg-ring', r: r + 1 }));
+  return group;
+}
+
+/** Evolved bottom edge: a nameplate carrying the option's letter. */
+function evolvedBin(bin, plate) {
+  const group = el('g', { class: `bin bin-${bin.kind}` });
+  group.style.setProperty('--bin-color', binColor(bin));
+
+  const x = bin.x + 4;
+  const width = bin.width - 8;
+  // The retry bin can be a single exit wide, so the plate's inset has to be a
+  // share of the bin rather than a fixed margin or it collapses to nothing.
+  const inset = Math.min(8, width * 0.14);
+  const plateY = bin.y + bin.height - plate.h - plate.gap;
+
+  group.append(el('rect', {
+    class: 'bin-bloom', x, y: bin.y, width, height: bin.height, rx: 14, filter: 'url(#db-bloom)',
+  }));
+  group.append(el('rect', { class: 'bin-well', x, y: bin.y, width, height: bin.height, rx: 14 }));
+  group.append(el('rect', {
+    class: 'bin-plate',
+    x: x + inset, y: plateY, width: width - inset * 2, height: plate.h, rx: 8,
+  }));
+
+  const label = el('text', {
+    class: 'bin-label',
+    x: bin.x + bin.width / 2,
+    y: bin.y + (plateY - bin.y) / 2,
+    'text-anchor': 'middle',
+    'dominant-baseline': 'middle',
+  });
+  label.textContent = binLetter(bin);
+  group.append(label);
+
+  return group;
+}
+
+/** Classic bottom edge: the printed mark above a brass stop. */
+function classicBin(bin, plate) {
+  const group = el('g', { class: `bin bin-${bin.kind} bin-classic` });
+  group.style.setProperty('--bin-color', binColor(bin));
+
+  const x = bin.x + 4;
+  const width = bin.width - 8;
+  const inset = Math.min(10, width * 0.14);
+  const plateY = bin.y + bin.height - plate.h - plate.gap;
+
+  group.append(el('rect', {
+    class: 'bin-bloom', x, y: bin.y, width, height: bin.height, rx: 12, filter: 'url(#db-bloom)',
+  }));
+  group.append(el('rect', { class: 'bin-well', x, y: bin.y, width, height: bin.height, rx: 12 }));
+  group.append(el('rect', {
+    class: 'bin-plate',
+    x: x + inset, y: plateY, width: width - inset * 2, height: plate.h, rx: 7,
+  }));
+  group.append(rivet(bin.x + bin.width / 2, plateY + plate.h / 2, plate.h * 0.34));
+
+  const label = el('text', {
+    class: 'bin-label bin-glyph',
+    x: bin.x + bin.width / 2,
+    y: bin.y + (plateY - bin.y) / 2,
+    'text-anchor': 'middle',
+    'dominant-baseline': 'middle',
+  });
+  label.textContent = binLetter(bin);
+  group.append(label);
 
   return group;
 }
 
 /**
  * @param {SVGSVGElement} svg
- * @param {number} k number of options
+ * @param {{mode:'evolved'|'classic', k?:number}} spec
  * @returns {{layout:object, ball:SVGGElement, binNodes:SVGGElement[],
  *            pegNodes:SVGGElement[], bins:SVGGElement}}
  */
-export function renderBoard(svg, k) {
-  const layout = buildLayout(k);
+export function renderBoard(svg, spec) {
+  const classic = spec.mode === 'classic';
+  const layout = classic ? buildClassicLayout() : buildLayout(spec.k);
+  const { view, panel, plate } = layout;
 
-  svg.setAttribute('viewBox', `0 0 ${VIEW.w} ${VIEW.h}`);
+  svg.setAttribute('viewBox', `0 0 ${view.w} ${view.h}`);
   svg.style.setProperty('--groove-w', layout.groove.toFixed(2));
   svg.style.setProperty('--floor-w', layout.floor.toFixed(2));
   svg.replaceChildren();
@@ -115,24 +224,17 @@ export function renderBoard(svg, k) {
   svg.append(defs());
 
   svg.append(el('rect', {
-    class: 'board-panel', x: PANEL.x, y: PANEL.y, width: PANEL.w, height: PANEL.h, rx: PANEL.r,
+    class: 'board-panel', x: panel.x, y: panel.y, width: panel.w, height: panel.h, rx: panel.r,
   }));
   svg.append(el('rect', {
     class: 'board-inlay',
-    x: PANEL.x + 14, y: PANEL.y + 14,
-    width: PANEL.w - 28, height: PANEL.h - 28,
-    rx: PANEL.r - 8,
+    x: panel.x + 14, y: panel.y + 14,
+    width: panel.w - 28, height: panel.h - 28,
+    rx: panel.r - 8,
   }));
 
-  svg.append(faceplate());
-
-  // The groove is three strokes: the cut, the floor inside it, and a hairline
-  // sheen along the centre that catches the light like a milled slot.
-  const channels = el('g', { class: 'channels' });
-  for (const cls of ['channel-cut', 'channel-floor', 'channel-sheen']) {
-    channels.append(el('path', { class: `channel ${cls}`, d: layout.channelPath }));
-  }
-  svg.append(channels);
+  svg.append(classic ? classicFaceplate(view, panel) : faceplate(view));
+  svg.append(channels(layout));
 
   const pegNodes = [];
   const pegs = el('g', { class: 'pegs' });
@@ -149,46 +251,15 @@ export function renderBoard(svg, k) {
   const binNodes = [];
   const bins = el('g', { class: 'bins' });
   for (const bin of layout.bins) {
-    const group = el('g', { class: `bin bin-${bin.kind}` });
-    group.style.setProperty('--bin-color', binColor(bin));
-
-    const x = bin.x + 4;
-    const width = bin.width - 8;
-    // The retry bin can be a single exit wide, so the plate's inset has to be a
-    // share of the bin rather than a fixed margin or it collapses to nothing.
-    const inset = Math.min(8, width * 0.14);
-    const plateY = bin.y + bin.height - PLATE.h - PLATE.gap;
-
-    group.append(el('rect', {
-      class: 'bin-bloom',
-      x, y: bin.y, width, height: bin.height, rx: 14,
-      filter: 'url(#db-bloom)',
-    }));
-    group.append(el('rect', {
-      class: 'bin-well', x, y: bin.y, width, height: bin.height, rx: 14,
-    }));
-    // A nameplate at the foot of the well, the way a bin on a real instrument
-    // would be labelled — it is also what ignites when the ball lands.
-    group.append(el('rect', {
-      class: 'bin-plate',
-      x: x + inset, y: plateY,
-      width: width - inset * 2, height: PLATE.h, rx: 8,
-    }));
-
-    const label = el('text', {
-      class: 'bin-label',
-      x: bin.x + bin.width / 2,
-      y: bin.y + (plateY - bin.y) / 2,
-      'text-anchor': 'middle',
-      'dominant-baseline': 'middle',
-    });
-    label.textContent = binLetter(bin);
-    group.append(label);
-
+    const group = classic ? classicBin(bin, plate) : evolvedBin(bin, plate);
     binNodes.push(group);
     bins.append(group);
   }
   svg.append(bins);
+
+  // The classic panel has a knob where the ball is loaded; the evolved board
+  // releases from an open channel, so it gets the pulse instead.
+  if (classic) svg.append(rivet(layout.entry.x, layout.entry.y - layout.ballR - 16, 11));
 
   const pulse = el('g', {
     class: 'entry-pulse', transform: `translate(${layout.entry.x} ${layout.entry.y})`,

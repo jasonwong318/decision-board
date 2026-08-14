@@ -52,6 +52,12 @@
   --opt-4: #dd8f6f;
   --opt-retry: #8f887c;
 
+  /* The classic board's three outcomes, named against the page rather than
+     painted on the panel — the panel's own marks live in board-classic.css. */
+  --cls-no: #e0b9a0;
+  --cls-again: #b9ae99;
+  --cls-yes: #f0cd72;
+
   /* ------------------------------------------------------------ board */
 
   --panel-top: #1a1712;

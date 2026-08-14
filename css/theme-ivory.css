@@ -53,6 +53,11 @@
   --opt-4: #8f4324;
   --opt-retry: #6b645c;
 
+  /* Re-cut for paper, same as the option colours above. */
+  --cls-no: #8f4324;
+  --cls-again: #6b645c;
+  --cls-yes: #7f5c14;
+
   /* ------------------------------------------------------------ board */
 
   --panel-top: #fffdf7;

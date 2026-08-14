@@ -28,6 +28,9 @@ jobs:
       # The whole app rests on the draw being provably fair, so publishing is
       # gated on the fairness proof rather than run separately.
       - run: node test/fairness.mjs
+      # The classic board makes the opposite claim — that it reproduces the
+      # toy's bias exactly — and that is just as much a promise to keep.
+      - run: node test/classic.mjs
 
   deploy:
     needs: verify
