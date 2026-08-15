@@ -1,0 +1,91 @@
+/**
+ * "Ritual" — obsidian and brass. The default.
+ *
+ * Near-black warmed towards brown so it reads as lacquer rather than screen
+ * black, with a single metallic accent. One accent is the whole discipline:
+ * anything that needs emphasis borrows the brass, nothing invents its own.
+ */
+
+:root[data-theme="ritual"] {
+  --bg: #0b0a09;
+  --bg-wash: radial-gradient(ellipse 130% 80% at 50% -12%, #1b1712 0%, transparent 62%);
+  --surface: #141210;
+  --sheet: #16130f;
+
+  --line: rgba(201, 168, 106, 0.13);
+  --line-strong: rgba(201, 168, 106, 0.26);
+
+  --veil: rgba(5, 4, 3, 0.92);
+  --scrim: rgba(8, 7, 5, 0.62);
+  --verdict-scrim: rgba(8, 7, 5, 0.84);
+  --sheet-shadow: 0 30px 80px rgba(0, 0, 0, 0.72);
+
+  --text: #f0e9dc;
+  --text-dim: #a89e8d;
+  --text-faint: #6f6659;
+
+  --accent: #c9a86a;
+  --accent-quiet: #938054;
+  --accent-halo: rgba(201, 168, 106, 0.22);
+  --accent-fill: linear-gradient(180deg, #d6ba81 0%, #bf9e60 55%, #9d7f45 100%);
+  --accent-edge: rgba(226, 200, 145, 0.42);
+  --accent-text: #191408;
+  --accent-lift: 0 6px 20px rgba(201, 168, 106, 0.14);
+  --accent-lift-hi: 0 10px 28px rgba(201, 168, 106, 0.24);
+
+  --focus: #e6cc96;
+  --danger: #dd9280;
+
+  --toast: #17140f;
+  --toast-text: #f0e9dc;
+
+  --grain-opacity: 0.055;
+  --grain-blend: overlay;
+
+  --verdict-glow: 0 0 48px var(--bin-color);
+
+  /* Option identities — luminous against the dark, even in weight. */
+  --opt-0: #d8a94b;
+  --opt-1: #6fae9b;
+  --opt-2: #7f9ad6;
+  --opt-3: #b28ed4;
+  --opt-4: #dd8f6f;
+  --opt-retry: #8f887c;
+
+  /* The classic board's three outcomes, named against the page rather than
+     painted on the panel — the panel's own marks live in board-classic.css. */
+  --cls-no: #e0b9a0;
+  --cls-again: #b9ae99;
+  --cls-yes: #f0cd72;
+
+  /* ------------------------------------------------------------ board */
+
+  --panel-top: #1a1712;
+  --panel-bottom: #0d0b09;
+  --panel-edge: rgba(201, 168, 106, 0.3);
+  --panel-inlay: rgba(201, 168, 106, 0.17);
+
+  --wordmark: rgba(201, 168, 106, 0.4);
+  --wordmark-shadow: rgba(0, 0, 0, 0.7);
+
+  --groove: #060504;
+  --groove-floor: #171310;
+  --groove-sheen: rgba(201, 168, 106, 0.34);
+
+  --peg-hi: #f3e0b4;
+  --peg: #b8975c;
+  --peg-lo: #63502c;
+  --peg-ring: rgba(0, 0, 0, 0.6);
+
+  --well-top: #090807;
+  --well-bottom: #15120e;
+  --well-edge: rgba(201, 168, 106, 0.14);
+  --bin-text: rgba(240, 233, 220, 0.45);
+  --bin-text-won: #fff8e8;
+
+  --ball-hi: #fffaef;
+  --ball: #d6cfc0;
+  --ball-lo: #83796b;
+  --ball-edge: rgba(0, 0, 0, 0.45);
+  --ball-spec: #ffffff;
+}

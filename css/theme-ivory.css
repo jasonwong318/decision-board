@@ -1,0 +1,91 @@
+/**
+ * "Ivory" — paper and ink, for daylight.
+ *
+ * Same rhythm as Ritual, opposite material: a warm off-white ground, ink text,
+ * and the brass demoted to a hairline so the light theme stays quiet. Option
+ * colours are re-cut darker here — the identity is the hue, not the value, so
+ * each one has to earn its contrast against paper on its own.
+ */
+
+:root[data-theme="ivory"] {
+  --bg: #f3f0e8;
+  --bg-wash: radial-gradient(ellipse 130% 80% at 50% -12%, #fffdf7 0%, transparent 58%);
+  --surface: #fffdf7;
+  --sheet: #fffdf7;
+
+  --line: rgba(48, 38, 24, 0.12);
+  --line-strong: rgba(48, 38, 24, 0.24);
+
+  --veil: rgba(30, 24, 16, 0.5);
+  --scrim: rgba(40, 33, 22, 0.34);
+  --verdict-scrim: rgba(243, 240, 232, 0.88);
+  --sheet-shadow: 0 26px 64px rgba(50, 40, 26, 0.18);
+
+  --text: #241d13;
+  --text-dim: #5c5346;
+  --text-faint: #8b8274;
+
+  --accent: #8a6a2c;
+  --accent-quiet: #9b8557;
+  --accent-halo: rgba(138, 106, 44, 0.16);
+  --accent-fill: linear-gradient(180deg, #322a1c 0%, #241d13 100%);
+  --accent-edge: rgba(36, 29, 19, 0.9);
+  --accent-text: #f7f3e8;
+  --accent-lift: 0 8px 22px rgba(36, 29, 19, 0.18);
+  --accent-lift-hi: 0 12px 30px rgba(36, 29, 19, 0.26);
+
+  --focus: #8a6a2c;
+  --danger: #a8402c;
+
+  --toast: #241d13;
+  --toast-text: #f7f3e8;
+
+  --grain-opacity: 0.035;
+  --grain-blend: multiply;
+
+  --verdict-glow: none;
+
+  /* Re-cut for paper: every hue lands near the same value, ~5:1 on the ground. */
+  --opt-0: #7f5c14;
+  --opt-1: #1f5f52;
+  --opt-2: #33538f;
+  --opt-3: #5f4287;
+  --opt-4: #8f4324;
+  --opt-retry: #6b645c;
+
+  /* Re-cut for paper, same as the option colours above. */
+  --cls-no: #8f4324;
+  --cls-again: #6b645c;
+  --cls-yes: #7f5c14;
+
+  /* ------------------------------------------------------------ board */
+
+  --panel-top: #fffdf7;
+  --panel-bottom: #e9e4d8;
+  --panel-edge: rgba(48, 38, 24, 0.18);
+  --panel-inlay: rgba(48, 38, 24, 0.1);
+
+  --wordmark: rgba(48, 38, 24, 0.3);
+  --wordmark-shadow: rgba(255, 255, 255, 0.8);
+
+  --groove: #d5cec0;
+  --groove-floor: #e6e1d5;
+  --groove-sheen: rgba(255, 255, 255, 0.9);
+
+  --peg-hi: #ffffff;
+  --peg: #c3b799;
+  --peg-lo: #8d8168;
+  --peg-ring: rgba(48, 38, 24, 0.22);
+
+  --well-top: #ddd7c8;
+  --well-bottom: #eae5da;
+  --well-edge: rgba(48, 38, 24, 0.14);
+  --bin-text: rgba(36, 29, 19, 0.45);
+  --bin-text-won: #241d13;
+
+  --ball-hi: #6e6455;
+  --ball: #3a332a;
+  --ball-lo: #1a160f;
+  --ball-edge: rgba(0, 0, 0, 0.35);
+  --ball-spec: rgba(255, 255, 255, 0.75);
+}

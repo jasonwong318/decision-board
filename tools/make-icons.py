@@ -14,11 +14,15 @@ from PIL import Image, ImageDraw
 OUT = Path(__file__).resolve().parent.parent / "icons"
 SS = 4  # supersampling factor
 
-RED = (200, 16, 46, 255)
-GROOVE = (61, 17, 25, 255)
-WELL = (53, 17, 26, 255)
-BALL = (233, 234, 236, 255)
-BALL_EDGE = (141, 144, 153, 255)
+# Obsidian and brass, matching css/theme-ritual.css. The board itself cuts its
+# grooves *into* the panel, but dark-on-dark disappears at 192px, so the icon
+# inverts it: the channels are the brass and the panel is the ground.
+PANEL = (20, 17, 13, 255)
+INLAY = (201, 168, 106, 70)
+GROOVE = (138, 116, 68, 255)
+WELL = (201, 168, 106, 255)
+BALL = (240, 233, 220, 255)
+BALL_EDGE = (131, 121, 107, 255)
 
 
 def draw_icon(size, inset, rounded):
@@ -28,9 +32,16 @@ def draw_icon(size, inset, rounded):
     d = ImageDraw.Draw(img)
 
     if rounded:
-        d.rounded_rectangle([0, 0, s - 1, s - 1], radius=int(s * 0.22), fill=RED)
+        radius = int(s * 0.22)
+        d.rounded_rectangle([0, 0, s - 1, s - 1], radius=radius, fill=PANEL)
+        # The inlaid hairline the board carries on its faceplate.
+        edge = int(s * 0.055)
+        d.rounded_rectangle(
+            [edge, edge, s - 1 - edge, s - 1 - edge],
+            radius=radius - edge, outline=INLAY, width=max(1, int(s * 0.006)),
+        )
     else:
-        d.rectangle([0, 0, s - 1, s - 1], fill=RED)
+        d.rectangle([0, 0, s - 1, s - 1], fill=PANEL)
 
     # Map artwork coordinates (0..1) into the safe area.
     span = 1 - inset * 2
@@ -57,7 +68,7 @@ def draw_icon(size, inset, rounded):
     for joint in ((0.5, 0.30), (0.27, 0.52), (0.73, 0.52)):
         cap(*joint)
 
-    # Three landing bins, echoing the physical board's X / retry / check.
+    # Three landing bins, lit like the nameplates at the foot of the board.
     for left, right in ((0.06, 0.34), (0.38, 0.62), (0.66, 0.94)):
         x0, y0 = p(left, 0.78)
         x1, y1 = p(right, 0.95)
@@ -78,7 +89,7 @@ def main():
         ("icon-192.png", 192, 0.06, True),
         ("icon-512.png", 512, 0.06, True),
         # Maskable icons get cropped to a circle by the launcher, so the artwork
-        # sits inside the inner 80% and the red bleeds to the edges.
+        # sits inside the inner 80% and the panel bleeds to the edges.
         ("icon-maskable-512.png", 512, 0.18, False),
     ]
     for name, size, inset, rounded in targets:

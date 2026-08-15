@@ -1,0 +1,64 @@
+/**
+ * The classic board's material: red lacquer, brass rivets, ink marks.
+ *
+ * This is neither structure nor theme — it is the object. A physical panel is
+ * red under any light, so these values do not change with Ritual or Ivory; only
+ * the *page* around the board does.
+ *
+ * The three printed marks are warm and light because they sit on a dark red
+ * panel. The theme-scoped `--cls-*` colours are a separate set, used where the
+ * outcome is named against the page instead: the legend and the verdict.
+ */
+
+.app[data-mode="classic"] {
+  --panel-top: #c6172e;
+  --panel-bottom: #9b1022;
+  --panel-edge: rgba(52, 3, 9, 0.55);
+  --panel-inlay: rgba(255, 226, 220, 0.13);
+
+  --wordmark: rgba(36, 3, 8, 0.7);
+  --wordmark-shadow: rgba(255, 214, 205, 0.15);
+
+  --groove: #45070e;
+  --groove-floor: #5d0e17;
+  --groove-sheen: rgba(255, 202, 192, 0.13);
+
+  --peg-hi: #f3e0b4;
+  --peg: #b8975c;
+  --peg-lo: #63502c;
+  --peg-ring: rgba(0, 0, 0, 0.5);
+
+  --well-top: #3c060c;
+  --well-bottom: #580d16;
+  --well-edge: rgba(18, 0, 3, 0.5);
+  --bin-text: rgba(255, 232, 226, 0.5);
+  --bin-text-won: #ffffff;
+
+  --ball-hi: #fffaef;
+  --ball: #d6cfc0;
+  --ball-lo: #83796b;
+  --ball-edge: rgba(0, 0, 0, 0.42);
+  --ball-spec: #ffffff;
+}
+
+/* The object is square — 40 × 40 — not portrait like the evolved board. */
+.app[data-mode="classic"] .board-wrap { aspect-ratio: 1; max-width: 460px; }
+
+/* Marks on the panel. Fixed, because they are painted onto the red. */
+.app[data-mode="classic"] .bin-no { --mark: #ecd0b8; }
+.app[data-mode="classic"] .bin-again { --mark: #cfc1a7; }
+.app[data-mode="classic"] .bin-yes { --mark: #f2cf74; }
+
+.app[data-mode="classic"] .bin-plate { fill: var(--mark); }
+.app[data-mode="classic"] .bin-bloom { fill: var(--mark); }
+.app[data-mode="classic"] .bin.is-won .bin-well { stroke: var(--mark); }
+
+/* ✕ ↻ ✓ are punctuation, not letters — the display serif has no business here. */
+.bin-glyph {
+  font-family: var(--font-ui);
+  font-size: 58px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.rivet { pointer-events: none; }

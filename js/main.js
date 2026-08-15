@@ -1,11 +1,12 @@
 /** App wiring: screens, board lifecycle, sheets, service worker. */
 
 import { MIN_OPTIONS, MAX_OPTIONS, drop, binsFor, probabilities, RETRY_BIN } from './tree.js';
-import { ballRoute } from './layout.js';
+import { classicDrop, classicBins, classicProbabilities } from './classic.js';
+import { ballRoute, classicRoute } from './layout.js';
 import { renderBoard, placeBall, binLetter, binColor } from './render.js';
 import { animateBall, prefersReducedMotion } from './animate.js';
 import { t, setLang, getLang, detectLang, applyTranslations, LANGS } from './i18n.js';
-import { store, playableOptions, readUrlOptions, shareUrl, sanitizeLabel, normalizeOptions } from './state.js';
+import { store, playableOptions, readUrlBoard, shareUrl, sanitizeLabel, normalizeOptions } from './state.js';
 import { loadHistory, pushHistory, clearHistory } from './history.js';
 
 const $ = (id) => document.getElementById(id);
@@ -14,12 +15,47 @@ const app = $('app');
 const optionList = $('option-list');
 const rowTemplate = $('option-row-template');
 
-let board = null;      // { layout, ball, binNodes }
+/**
+ * Beats either side of the drop itself. The pause before the ball is released
+ * and the silence after it lands are what turn a random draw into a verdict —
+ * both are skipped entirely when the user has asked for reduced motion.
+ */
+const CHARGE_MS = 620;
+const HOLD_MS = 780;
+
+const THEME_COLORS = { ritual: '#0b0a09', ivory: '#f3f0e8' };
+const THEME_NAMES = { ritual: 'nav.themeRitual', ivory: 'nav.themeIvory' };
+
+let board = null;      // { layout, ball, binNodes, pegNodes, bins }
+let currentMode = 'evolved';
 let currentOptions = [];
 let dropping = false;
 let skipController = null;
 
 /* ------------------------------------------------------------ helpers */
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isClassic = () => currentMode === 'classic';
+
+/** The bins along the bottom of whichever board is on screen. */
+const currentBins = () => (isClassic() ? classicBins() : binsFor(currentOptions.length));
+
+/** What a bin is called: fixed wording on the classic board, your own on the evolved one. */
+function binLabel(bin) {
+  if (isClassic()) return t(`classic.${bin.kind}`);
+  return bin.kind === RETRY_BIN ? t('history.retryLabel') : currentOptions[bin.optionIndex];
+}
+
+/** A haptic tick per fork, where the platform has one. Never load-bearing. */
+function tick() {
+  if (prefersReducedMotion()) return;
+  try {
+    navigator.vibrate?.(6);
+  } catch {
+    /* unsupported, blocked, or the user has it off — all fine */
+  }
+}
 
 let toastTimer = 0;
 function toast(message) {
@@ -37,6 +73,13 @@ function openSheet(overlay) {
 
 function closeSheet(overlay) {
   overlay.hidden = true;
+  // Dismissing the verdict is what brings the room back up.
+  if (overlay.id === 'result-overlay') endCeremony();
+}
+
+function endCeremony() {
+  document.body.classList.remove('is-ceremony');
+  app.classList.remove('is-ceremony', 'is-charging', 'is-rolling');
 }
 
 function showScreen(name) {
@@ -90,6 +133,8 @@ function readSetup() {
 }
 
 function validate({ options }) {
+  // The classic board's outcomes are printed on the panel; there is nothing to check.
+  if (isClassic()) return null;
   const filled = options.filter(Boolean);
   if (filled.length < MIN_OPTIONS) return t('setup.errorTooFew');
   if (new Set(filled).size !== filled.length) return t('setup.errorDuplicate');
@@ -101,7 +146,7 @@ function validate({ options }) {
 function renderLegend() {
   const legend = $('legend');
   legend.replaceChildren();
-  for (const bin of binsFor(currentOptions.length)) {
+  for (const bin of currentBins()) {
     const item = document.createElement('li');
     item.className = `legend-item legend-${bin.kind}`;
     item.style.setProperty('--bin-color', binColor(bin));
@@ -112,7 +157,7 @@ function renderLegend() {
 
     const label = document.createElement('span');
     label.className = 'legend-label';
-    label.textContent = bin.kind === RETRY_BIN ? t('history.retryLabel') : currentOptions[bin.optionIndex];
+    label.textContent = binLabel(bin);
 
     item.append(key, label);
     legend.append(item);
@@ -120,14 +165,25 @@ function renderLegend() {
 }
 
 function buildBoard() {
-  board = renderBoard($('board'), currentOptions.length);
+  board = renderBoard($('board'), { mode: currentMode, k: currentOptions.length });
   $('board-question').textContent = store.question || t('app.tagline');
   renderLegend();
   $('skip-hint').hidden = prefersReducedMotion();
 }
 
 function clearWinner() {
+  board.bins.classList.remove('has-winner');
   for (const node of board.binNodes) node.classList.remove('is-won');
+  app.classList.remove('is-settled');
+}
+
+/** Flash the peg the ball has just committed to. -1 means "no fork here". */
+function strikePeg(index) {
+  const peg = index >= 0 ? board?.pegNodes[index] : null;
+  if (!peg) return;
+  peg.classList.add('is-struck');
+  setTimeout(() => peg.classList.remove('is-struck'), 110);
+  tick();
 }
 
 async function dropBall() {
@@ -137,31 +193,59 @@ async function dropBall() {
 
   const drawer = $('btn-drop');
   drawer.disabled = true;
-  drawer.textContent = t('board.dropping');
-  app.classList.add('is-rolling');
+  drawer.textContent = t('board.charging');
 
-  const result = drop(currentOptions.length);
-  const route = ballRoute(currentOptions.length, result.bits);
+  // The room dims and the board is the only lit thing left.
+  document.body.classList.add('is-ceremony');
+  app.classList.add('is-ceremony', 'is-charging');
+
+  // The draw happens here, before a single pixel moves — everything below is a
+  // replay, which is why skipping it cannot change the outcome.
+  const result = isClassic() ? classicDrop() : drop(currentOptions.length);
+  const route = isClassic() ? classicRoute(result.bits) : ballRoute(currentOptions.length, result.bits);
 
   placeBall(board.ball, board.layout.entry.x, board.layout.entry.y);
+  if (!prefersReducedMotion()) await wait(CHARGE_MS);
+
+  app.classList.remove('is-charging');
+  app.classList.add('is-rolling');
+  drawer.textContent = t('board.dropping');
 
   skipController = new AbortController();
-  await animateBall(board.ball, route, { signal: skipController.signal });
+  await animateBall(board.ball, route, {
+    signal: skipController.signal,
+    onStageEnd: (stage) => strikePeg(route.pegs[stage]),
+  });
   skipController = null;
 
-  board.binNodes[result.binIndex].classList.add('is-won');
+  app.classList.remove('is-rolling');
+  app.classList.add('is-settled');
 
-  const label = result.isRetry ? null : currentOptions[result.optionIndex];
+  board.bins.classList.add('has-winner');
+  board.binNodes[result.binIndex].classList.add('is-won');
+  tick();
+
+  const label = result.isRetry ? null : binLabel(result.bin);
   $('live').textContent = result.isRetry
     ? t('a11y.retryAnnounce')
     : t('a11y.resultAnnounce', { label });
 
-  pushHistory({ question: store.question, label, isRetry: result.isRetry });
+  // Classic outcomes are app wording, not the user's, so store the kind and
+  // translate it at display time — otherwise old entries freeze in whatever
+  // language they were drawn in.
+  pushHistory({
+    question: store.question,
+    label,
+    isRetry: result.isRetry,
+    classicKind: isClassic() ? result.bin.kind : null,
+  });
+
+  // Let the winning bin burn on its own for a beat before naming it.
+  if (!prefersReducedMotion()) await wait(HOLD_MS);
   showResult(result, label);
 
   drawer.disabled = false;
   drawer.textContent = t('board.drop');
-  app.classList.remove('is-rolling');
   dropping = false;
 }
 
@@ -172,7 +256,7 @@ function showResult(result, label) {
   $('result-body').hidden = !result.isRetry;
   $('btn-again').textContent = result.isRetry ? t('result.dropAgain') : t('result.again');
 
-  const card = $('result-overlay').querySelector('.result-card');
+  const card = $('result-overlay').querySelector('.verdict');
   card.style.setProperty('--bin-color', binColor(result.bin));
   card.classList.toggle('is-retry', result.isRetry);
 
@@ -181,13 +265,43 @@ function showResult(result, label) {
 
 /* ---------------------------------------------------------- sheets */
 
-function renderOdds() {
-  const k = currentOptions.length;
-  const { perOption, retry, exits, depth } = probabilities(k);
-  const table = $('odds-table');
-  // Trim trailing zeros: 43.75% reads better than 43.750%.
-  const pct = (value) => `${Number((value * 100).toFixed(3))}%`;
+// Trim trailing zeros: 43.75% reads better than 43.750%.
+const pct = (value) => `${Number((value * 100).toFixed(3))}%`;
 
+function renderOdds() {
+  $('fair-title').textContent = isClassic() ? t('fair.classicTitle') : t('fair.title');
+  $('fair-body').textContent = isClassic() ? t('fair.classicBody') : t('fair.body');
+  $('fair-compare').hidden = !isClassic();
+  if (isClassic()) renderClassicOdds();
+  else renderEvolvedOdds();
+}
+
+function renderClassicOdds() {
+  const { bins, exits, rows } = classicProbabilities();
+  const head = `<tr><th>${t('fair.tableOutcome')}</th><th>${t('fair.tableChance')}</th></tr>`;
+  const body = bins.map((bin) => (
+    `<tr${bin.kind === 'again' ? ' class="odds-retry"' : ''}>` +
+    `<td><span class="swatch" style="background:${bin.color}"></span>` +
+    `${bin.glyph} ${escapeHtml(t(`classic.${bin.kind}`))}</td>` +
+    `<td>${pct(bin.p)}</td></tr>`
+  ));
+
+  $('odds-table').innerHTML = [head, ...body].join('');
+  $('fair-exits').textContent = t('fair.classicExits', { n: exits, d: rows });
+  // The evolved board's own two-option retry slot is the sharpest possible
+  // control: same three outcomes, and the only difference is the merging.
+  $('fair-compare').textContent = t('fair.classicCompare', { p: pct(probabilities(2).retry) });
+}
+
+function renderEvolvedOdds() {
+  const table = $('odds-table');
+  if (currentOptions.length < MIN_OPTIONS) {
+    table.replaceChildren();
+    $('fair-exits').textContent = '';
+    return;
+  }
+
+  const { perOption, retry, exits, depth } = probabilities(currentOptions.length);
   const rows = [`<tr><th>${t('fair.tableOption')}</th><th>${t('fair.tableChance')}</th></tr>`];
   currentOptions.forEach((label, i) => {
     const swatch = binColor({ kind: 'option', optionIndex: i });
@@ -230,7 +344,8 @@ function renderHistory() {
 
     const main = document.createElement('span');
     main.className = 'history-result';
-    main.textContent = entry.isRetry ? `↻ ${t('history.retryLabel')}` : entry.label;
+    if (entry.classicKind) main.textContent = t(`classic.${entry.classicKind}`);
+    else main.textContent = entry.isRetry ? `↻ ${t('history.retryLabel')}` : entry.label;
 
     const meta = document.createElement('span');
     meta.className = 'history-meta';
@@ -245,9 +360,35 @@ function renderHistory() {
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  $('btn-theme').textContent = theme === 'board' ? '◐' : '◑';
-  const color = theme === 'board' ? '#c8102e' : '#0f172a';
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', color);
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', THEME_COLORS[theme]);
+
+  // The control is a toggle, so it should say where it takes you, not where you are.
+  const next = theme === 'ritual' ? 'ivory' : 'ritual';
+  const button = $('btn-theme');
+  button.textContent = theme === 'ritual' ? '◐' : '◑';
+  const label = t('nav.themeSwitch', { name: t(THEME_NAMES[next]) });
+  button.title = label;
+  button.setAttribute('aria-label', label);
+}
+
+/**
+ * Which board is in play. The mode owns the whole shape of the app: the classic
+ * panel has its three outcomes printed on it, so there is nothing to configure.
+ */
+function applyMode(mode) {
+  currentMode = mode;
+  app.dataset.mode = mode;
+  const classic = mode === 'classic';
+
+  $('options-block').hidden = classic;
+  $('setup-classic-note').hidden = !classic;
+  // Set after applyTranslations, which would otherwise reset these to their
+  // generic labels. The classic board has no options to go back and edit.
+  $('btn-start').textContent = classic ? t('setup.startClassic') : t('setup.start');
+  $('btn-edit').textContent = classic ? t('board.editClassic') : t('board.edit');
+
+  $('btn-mode-classic').classList.toggle('is-current', classic);
+  $('btn-mode-evolved').classList.toggle('is-current', !classic);
 }
 
 function applyLang(lang) {
@@ -259,11 +400,26 @@ function applyLang(lang) {
     $('board-question').textContent = store.question || t('app.tagline');
     $('btn-drop').textContent = t('board.drop');
   }
+  // setLang re-ran the translations, which would have flattened both of these
+  // back to their generic labels.
+  applyTheme(store.theme);
+  applyMode(currentMode);
 }
 
 /* ------------------------------------------------------------- init */
 
+function pickMode(mode) {
+  store.setMode(mode);
+  applyMode(mode);
+  fillSetup({ question: store.question, options: store.options });
+  showScreen('setup');
+}
+
 function wireEvents() {
+  $('btn-mode-classic').addEventListener('click', () => pickMode('classic'));
+  $('btn-mode-evolved').addEventListener('click', () => pickMode('evolved'));
+  $('btn-mode-back').addEventListener('click', () => showScreen('mode'));
+
   $('btn-add').addEventListener('click', () => addOptionRow());
 
   $('setup-form').addEventListener('submit', (event) => {
@@ -273,8 +429,8 @@ function wireEvents() {
     $('setup-error').textContent = error || '';
     if (error) return;
 
-    store.setBoard(data);
-    currentOptions = playableOptions(data.options);
+    store.setBoard(isClassic() ? { question: data.question } : data);
+    currentOptions = isClassic() ? [] : playableOptions(data.options);
     buildBoard();
     showScreen('board');
   });
@@ -290,7 +446,7 @@ function wireEvents() {
   $('board').addEventListener('click', () => skipController?.abort());
 
   $('btn-share').addEventListener('click', async () => {
-    const url = shareUrl({ question: store.question, options: currentOptions });
+    const url = shareUrl({ mode: currentMode, question: store.question, options: currentOptions });
     try {
       if (navigator.share) await navigator.share({ title: t('app.name'), url });
       else {
@@ -302,15 +458,17 @@ function wireEvents() {
     }
   });
 
+  // Straight back into another drop, so the ceremony is never torn down and
+  // rebuilt between two rounds.
   $('btn-again').addEventListener('click', () => {
-    closeSheet($('result-overlay'));
+    $('result-overlay').hidden = true;
     dropBall();
   });
   $('btn-result-close').addEventListener('click', () => closeSheet($('result-overlay')));
 
   $('btn-fair').addEventListener('click', () => {
-    if (!currentOptions.length) currentOptions = playableOptions();
-    if (currentOptions.length >= MIN_OPTIONS) renderOdds();
+    if (!isClassic() && !currentOptions.length) currentOptions = playableOptions();
+    renderOdds();
     openSheet($('fair-overlay'));
   });
   $('btn-fair-close').addEventListener('click', () => closeSheet($('fair-overlay')));
@@ -326,7 +484,7 @@ function wireEvents() {
   $('btn-history-close').addEventListener('click', () => closeSheet($('history-overlay')));
 
   $('btn-theme').addEventListener('click', () => {
-    const next = store.theme === 'board' ? 'modern' : 'board';
+    const next = store.theme === 'ritual' ? 'ivory' : 'ritual';
     store.setTheme(next);
     applyTheme(next);
   });
@@ -350,28 +508,36 @@ function wireEvents() {
 }
 
 function init() {
+  currentMode = store.mode;
   applyTheme(store.theme);
   applyLang(store.lang || detectLang());
 
-  const shared = readUrlOptions();
+  const shared = readUrlBoard();
   if (shared) {
-    store.setBoard(shared);
+    store.setMode(shared.mode);
+    store.setBoard(shared.mode === 'classic' ? { question: shared.question } : shared);
     // Drop the query once it has been absorbed, otherwise editing the options
     // and reloading would silently snap back to the shared set. The Share
     // button rebuilds the link on demand.
     history.replaceState({}, '', window.location.pathname);
   }
+  applyMode(store.mode);
 
   fillSetup({ question: store.question, options: store.options });
   wireEvents();
 
-  const ready = playableOptions();
-  if (shared && ready.length >= MIN_OPTIONS) {
-    currentOptions = ready;
-    buildBoard();
-    showScreen('board');
+  // A shared link names its board, so it opens straight onto it.
+  if (shared) {
+    currentOptions = shared.mode === 'classic' ? [] : playableOptions();
+    if (shared.mode === 'classic' || currentOptions.length >= MIN_OPTIONS) {
+      buildBoard();
+      showScreen('board');
+      registerServiceWorker();
+      return;
+    }
   }
 
+  showScreen('mode');
   registerServiceWorker();
 }
 

@@ -1,0 +1,77 @@
+/**
+ * Design tokens: type, space, radii, motion, depth.
+ *
+ * Nothing here is a colour — colours belong to the theme files so both themes
+ * inherit exactly the same rhythm and only disagree about material.
+ */
+
+:root {
+  /* ------------------------------------------------------------ type */
+
+  /* Latin resolves to the crisp system UI face; CJK falls through to it. */
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
+
+  /* The ceremonial voice: questions, verdicts, section titles. */
+  --font-display:
+    "Noto Serif TC", "Source Han Serif TC", "Songti TC", "Songti SC",
+    "Hiragino Mincho ProN", "Yu Mincho", "PMingLiU", "MingLiU",
+    Georgia, "Times New Roman", serif;
+
+  --font-numeric: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* An eyebrow is small, wide and quiet — it frames without competing. The
+     tracking is restrained because these labels are set in Chinese as often as
+     in Latin, and CJK falls apart long before Latin does. */
+  --fs-eyebrow: 0.66rem;
+  --ls-eyebrow: 0.16em;
+
+  --fs-micro: 0.74rem;
+  --fs-small: 0.83rem;
+  --fs-body: 0.95rem;
+  --fs-lead: clamp(1.05rem, 3.4vw, 1.22rem);
+  --fs-title: clamp(1.5rem, 6vw, 2rem);
+  --fs-verdict: clamp(2.1rem, 10vw, 3.4rem);
+
+  /* ----------------------------------------------------------- space */
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 22px;
+  --sp-6: 30px;
+  --sp-7: 40px;
+  --sp-8: 56px;
+
+  --measure: 34rem;
+
+  /* ----------------------------------------------------------- shape */
+
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  --hairline: 1px;
+
+  /* ---------------------------------------------------------- motion */
+
+  /* Expo-out: fast commitment, long settle. The whole app moves like this. */
+  --ease-ritual: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-weight: cubic-bezier(0.34, 0.62, 0.22, 1);
+
+  --dur-tap: 120ms;
+  --dur-ui: 240ms;
+  --dur-reveal: 620ms;
+  --dur-ceremony: 900ms;
+
+  /* ------------------------------------------------------------ depth */
+
+  --z-board: 1;
+  --z-chrome: 10;
+  --z-overlay: 40;
+  --z-toast: 60;
+}
