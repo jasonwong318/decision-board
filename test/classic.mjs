@@ -72,8 +72,8 @@ const map = classicExitToBin();
 check('every exit is claimed by exactly one slot', map.every((b) => Number.isInteger(b)));
 check(
   'the three slots tile the bottom row with no gaps',
-  bins.reduce((sum, bin) => sum + bin.exitCount, 0) === CLASSIC_EXITS
-  && bins.every((bin, i) => bin.exitStart === bins.slice(0, i).reduce((s, b) => s + b.exitCount, 0)),
+  bins.reduce((sum, bin) => sum + bin.slotCount, 0) === CLASSIC_EXITS
+  && bins.every((bin, i) => bin.slotStart === bins.slice(0, i).reduce((s, b) => s + b.slotCount, 0)),
 );
 
 const { bins: odds } = classicProbabilities();
@@ -88,7 +88,7 @@ check(
 );
 
 // The headline: one seventh of the width, but nearly a third of every drop.
-const widthShare = bins.find((b) => b.kind === 'again').exitCount / CLASSIC_EXITS;
+const widthShare = bins.find((b) => b.kind === 'again').slotCount / CLASSIC_EXITS;
 check(
   'the middle slot takes far more than its share of the width',
   byKind.again > widthShare * 2,

@@ -131,6 +131,35 @@ function channels(layout) {
   return group;
 }
 
+/**
+ * The crossing band, drawn strand by strand.
+ *
+ * These channels cross; they never merge, and the drawing has to say so or the
+ * board's whole claim looks false. Each strand that passes over another carries
+ * a casing in the panel's own colour, which reads as a bridge: the groove
+ * underneath visibly runs on beneath it.
+ *
+ * Strands moving left are laid down first and those moving right on top, so
+ * every crossing resolves the same way and the band reads as woven rather than
+ * as a tangle. A strand that does not move sideways needs no bridge at all.
+ */
+function weave(strands) {
+  const group = el('g', { class: 'weave' });
+  const ordered = [...strands].sort((a, b) => a.dx - b.dx);
+
+  for (const strand of ordered) {
+    const layer = el('g', { class: 'weave-strand' });
+    if (strand.dx !== 0) {
+      layer.append(el('path', { class: 'channel weave-casing', d: strand.d }));
+    }
+    layer.append(el('path', { class: 'channel channel-cut', d: strand.d }));
+    layer.append(el('path', { class: 'channel channel-floor', d: strand.d }));
+    layer.append(el('path', { class: 'channel channel-sheen', d: strand.d }));
+    group.append(layer);
+  }
+  return group;
+}
+
 function rivet(x, y, r) {
   const group = el('g', { class: 'rivet', transform: `translate(${x} ${y})` });
   group.append(el('circle', { class: 'peg-body', r }));
@@ -235,6 +264,7 @@ export function renderBoard(svg, spec) {
 
   svg.append(classic ? classicFaceplate(view, panel) : faceplate(view));
   svg.append(channels(layout));
+  if (layout.weave) svg.append(weave(layout.weave));
 
   const pegNodes = [];
   const pegs = el('g', { class: 'pegs' });

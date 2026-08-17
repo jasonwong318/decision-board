@@ -25,14 +25,14 @@
 <div class="app" id="app" data-screen="mode" data-mode="evolved">
 
   <header class="topbar">
-    <div class="brand">
+    <button type="button" class="brand" id="btn-home" data-i18n-attr="title:nav.home,aria-label:nav.home">
       <!-- A ball above the chute it is about to fall into. -->
       <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="12" cy="6.5" r="2.9" class="brand-ball"/>
         <path d="M5.5 10.5 V13 L12 20 L18.5 13 V10.5" class="brand-fork"/>
       </svg>
       <span class="brand-name" data-i18n="app.name"></span>
-    </div>
+    </button>
     <nav class="topbar-actions">
       <button type="button" class="icon-btn" id="btn-fair" data-i18n-attr="title:nav.fair,aria-label:nav.fair">?</button>
       <button type="button" class="icon-btn" id="btn-history" data-i18n-attr="title:nav.history,aria-label:nav.history">☰</button>

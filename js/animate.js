@@ -17,6 +17,9 @@ const FORK_STAGE_MS = 330;
 const DROP_STAGE_MS = 460;
 const FORK_PAUSE_MS = 80;
 const SETTLE_MS = 240;
+/** The traverse across the weave is where the answer is decided; let it read. */
+const APPROACH_MS = 200;
+const WEAVE_MS = 700;
 const SETTLE_RISE = 9; // how far the ball rebounds out of the well, in view units
 
 export function prefersReducedMotion() {
@@ -102,11 +105,18 @@ export function animateBall(ball, route, opts = {}) {
 
     signal?.addEventListener('abort', finish, { once: true });
 
+    const kindOf = (i) => route.kinds?.[i] ?? (i === 0 ? 'entry' : 'fork');
+
     const stageDuration = (i) => {
-      if (i === 0) return FIRST_STAGE_MS;
-      if (i === stageCount - 1) return DROP_STAGE_MS;
-      // Later forks run slightly quicker, so the ball reads as accelerating.
-      return FORK_STAGE_MS * (1 - (i / stageCount) * 0.35) + FORK_PAUSE_MS;
+      switch (kindOf(i)) {
+        case 'entry': return FIRST_STAGE_MS;
+        case 'approach': return APPROACH_MS;
+        case 'weave': return WEAVE_MS;
+        case 'fall': return DROP_STAGE_MS;
+        default:
+          // Later forks run slightly quicker, so the ball reads as accelerating.
+          return FORK_STAGE_MS * (1 - (i / stageCount) * 0.35) + FORK_PAUSE_MS;
+      }
     };
 
     const step = (now) => {
@@ -125,9 +135,11 @@ export function animateBall(ball, route, opts = {}) {
         return;
       }
 
-      const isLast = stageIndex === stageCount - 1;
       const raw = Math.min((now - stageStart) / stageDuration(stageIndex), 1);
-      const eased = isLast ? easeIn(raw) : easeInOut(raw);
+      // The final drop accelerates under gravity; everything else eases.
+      const eased = kindOf(stageIndex) === 'fall' && stageIndex === stageCount - 1
+        ? easeIn(raw)
+        : easeInOut(raw);
       const { x, y } = pointAt(route.stages[stageIndex], eased);
       placeBall(ball, x, y);
 

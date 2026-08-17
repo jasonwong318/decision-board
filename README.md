@@ -41,6 +41,42 @@ A / retry / B, so they keep a 7/2/7.
 Bins are laid out left to right in option order with the retry slot inserted
 after the ⌈k/2⌉-th option, which puts it dead centre for two options.
 
+### The weave, and why the board needs one
+
+Being fair is not the same as being *suspenseful*, and the first version was
+fair but gave itself away. Bins own runs of consecutive positions, and the fork
+bits read as a binary number with the first fork as the most significant bit —
+so with two options, going left at the very first fork landed in exits 0–7, of
+which seven belonged to A. One fork out of four and the answer was 87.5%
+settled; the remaining three only decided whether it clipped the retry slot.
+
+The fix is a permutation, not a different shape. Below the last fork row the
+channels cross over and under each other in a woven band, carrying exit `e` to
+the landing slot whose index is `e` with its bits reversed. The first fork now
+controls the *least* significant bit of the landing slot, so it picks odd or
+even positions spread along the whole bottom edge, and the last fork is what
+finally chooses a side.
+
+Worst-case share held by any one bin once the first fork has been taken:
+
+| Options | Before | After |
+|--------:|-------:|------:|
+| 2 | 87.5% | 50% |
+| 3 | 62.5% | 37.5% |
+| 4 | 50% | 25% |
+| 5 | 37.5% | 25% |
+
+Fairness is untouched, and that is the whole reason for using a permutation:
+bit reversal is a bijection, so every exit still has probability exactly
+`1/2^depth` and every bin still owns exactly as many paths as it owns slots.
+The channels **cross**; they still never merge, and the drawing says so — a
+strand passing over another carries a bridge in the panel's own colour, with
+the groove beneath running visibly on underneath it.
+
+`test/fairness.mjs` asserts both halves of that: the weave is a bijection, and
+no single fork leaves any bin above 55%. The second assertion would have failed
+on the old board, which is the point of having it.
+
 ## The classic board keeps its bias
 
 Classic mode is not the evolved board in a red skin — it is a different draw.
@@ -138,7 +174,7 @@ css/board-classic.css the classic panel's material — red lacquer and brass
 js/tree.js            evolved board: shapes, exit -> option mapping, drop()
 js/classic.js         classic board: merging channels, binomial slots
 js/rng.js             crypto-backed fair bit source
-js/layout.js          geometry: node positions, grooves, ball route
+js/layout.js          geometry: node positions, grooves, the weave, ball route
 js/render.js          draws the SVG board
 js/animate.js         walks the ball along the route
 js/state.js           options, persistence, share links
@@ -163,3 +199,4 @@ tools/make-icons.py   regenerates icons/ (needs Pillow)
 - Honours `prefers-reduced-motion` by showing the result without the animation —
   the draw is identical either way
 - Tapping the board fast-forwards the replay; it cannot change the outcome
+- The wordmark is a link back to the start

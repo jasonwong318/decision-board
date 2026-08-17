@@ -50,24 +50,25 @@ export function shapeFor(k) {
 }
 
 /**
- * Bins laid out left to right along the bottom of the board.
+ * Bins laid out left to right along the bottom of the board, over *slots*
+ * rather than exits — see slotForExit for why the two are not the same.
  *
  * The retry bin is inserted after the ceil(k/2)-th option so that it sits near
  * the middle; for k=2 that reproduces the physical board's A / retry / B.
  *
  * @param {number} k
- * @returns {{kind:'option'|'retry', optionIndex:number, exitStart:number,
- *            exitCount:number}[]}
+ * @returns {{kind:'option'|'retry', optionIndex:number, slotStart:number,
+ *            slotCount:number}[]}
  */
 export function binsFor(k) {
   const { per, retry } = shapeFor(k);
   const retryAfter = Math.ceil(k / 2);
   const bins = [];
-  let exit = 0;
+  let slot = 0;
 
-  const push = (kind, optionIndex, exitCount) => {
-    bins.push({ kind, optionIndex, exitStart: exit, exitCount });
-    exit += exitCount;
+  const push = (kind, optionIndex, slotCount) => {
+    bins.push({ kind, optionIndex, slotStart: slot, slotCount });
+    slot += slotCount;
   };
 
   for (let i = 0; i < k; i++) {
@@ -78,17 +79,58 @@ export function binsFor(k) {
 }
 
 /**
- * Exit index -> bin index, precomputed for the whole bottom row.
+ * Which bottom slot an exit feeds into: the exit index with its bits reversed.
+ *
+ * Without this the board gives itself away. Bins own runs of consecutive
+ * positions, and `exitFromBits` reads the first fork as the *most* significant
+ * bit — so with two options, going left at the very first fork lands in exits
+ * 0–7, of which seven belong to A. One fork out of four and the answer is 87.5%
+ * settled; the rest of the descent is theatre.
+ *
+ * Reversing the bits makes the first fork the *least* significant bit of the
+ * landing slot, so it picks odd or even positions spread along the whole bottom
+ * edge, and the last fork is what finally chooses a side. The same left-at-the-
+ * first-fork now leaves A at 50% against B's 37.5%.
+ *
+ * Fairness is untouched, and that is the point of using a permutation rather
+ * than a different shape: bit reversal is a bijection, every exit still has
+ * probability exactly 1/2^depth, so every bin still owns exactly as many paths
+ * as it owns slots. The board is drawn with the channels physically crossing
+ * over and under each other to get there — they cross, they never merge.
+ *
+ * @param {number} exit
+ * @param {number} depth
+ * @returns {number} slot index
+ */
+export function slotForExit(exit, depth) {
+  let slot = 0;
+  for (let i = 0; i < depth; i++) slot = (slot << 1) | ((exit >> i) & 1);
+  return slot;
+}
+
+/**
+ * Slot index -> bin index, precomputed for the whole bottom row.
+ * @param {number} k
+ * @returns {number[]} length 2^depth
+ */
+export function slotToBin(k) {
+  const bins = binsFor(k);
+  const map = new Array(shapeFor(k).exits);
+  bins.forEach((bin, binIndex) => {
+    for (let i = 0; i < bin.slotCount; i++) map[bin.slotStart + i] = binIndex;
+  });
+  return map;
+}
+
+/**
+ * Exit index -> bin index, following the weave.
  * @param {number} k
  * @returns {number[]} length 2^depth
  */
 export function exitToBin(k) {
-  const bins = binsFor(k);
-  const map = new Array(shapeFor(k).exits);
-  bins.forEach((bin, binIndex) => {
-    for (let i = 0; i < bin.exitCount; i++) map[bin.exitStart + i] = binIndex;
-  });
-  return map;
+  const { depth, exits } = shapeFor(k);
+  const slots = slotToBin(k);
+  return Array.from({ length: exits }, (_, exit) => slots[slotForExit(exit, depth)]);
 }
 
 /**
@@ -110,8 +152,8 @@ export function exitFromBits(bits) {
  *
  * @param {number} k number of options
  * @param {{nextBit:() => 0|1}} [bitSource] injectable for tests
- * @returns {{bits:(0|1)[], exit:number, binIndex:number, bin:object,
- *            isRetry:boolean, optionIndex:number}}
+ * @returns {{bits:(0|1)[], exit:number, slot:number, binIndex:number,
+ *            bin:object, isRetry:boolean, optionIndex:number}}
  */
 export function drop(k, bitSource = defaultBitSource) {
   const { depth } = shapeFor(k);
@@ -119,12 +161,14 @@ export function drop(k, bitSource = defaultBitSource) {
   for (let i = 0; i < depth; i++) bits.push(bitSource.nextBit());
 
   const exit = exitFromBits(bits);
-  const binIndex = exitToBin(k)[exit];
+  const slot = slotForExit(exit, depth);
+  const binIndex = slotToBin(k)[slot];
   const bin = binsFor(k)[binIndex];
 
   return {
     bits,
     exit,
+    slot,
     binIndex,
     bin,
     isRetry: bin.kind === RETRY_BIN,

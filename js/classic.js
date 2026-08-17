@@ -32,9 +32,9 @@ export const CLASSIC_EXITS = CLASSIC_ROWS + 1;
  * board's real geometry, and it is what makes the middle's 31.25% so striking.
  */
 const LAYOUT = [
-  { kind: 'no', glyph: '✕', color: 'var(--cls-no)', exitCount: 3 },
-  { kind: 'again', glyph: '↻', color: 'var(--cls-again)', exitCount: 1 },
-  { kind: 'yes', glyph: '✓', color: 'var(--cls-yes)', exitCount: 3 },
+  { kind: 'no', glyph: '✕', color: 'var(--cls-no)', slotCount: 3 },
+  { kind: 'again', glyph: '↻', color: 'var(--cls-again)', slotCount: 1 },
+  { kind: 'yes', glyph: '✓', color: 'var(--cls-yes)', slotCount: 3 },
 ];
 
 /** n choose k, exact for the small n this board uses. */
@@ -50,14 +50,17 @@ export function exitWeights() {
 }
 
 /**
- * @returns {{kind:string, glyph:string, color:string, exitStart:number,
- *            exitCount:number, optionIndex:number}[]}
+ * The classic board has no weave — an exit *is* a slot, because the physical
+ * panel drops straight out of the maze into whichever slot is beneath it.
+ *
+ * @returns {{kind:string, glyph:string, color:string, slotStart:number,
+ *            slotCount:number, optionIndex:number}[]}
  */
 export function classicBins() {
-  let exit = 0;
-  return LAYOUT.map((slot) => {
-    const bin = { ...slot, exitStart: exit, optionIndex: -1 };
-    exit += slot.exitCount;
+  let slot = 0;
+  return LAYOUT.map((entry) => {
+    const bin = { ...entry, slotStart: slot, optionIndex: -1 };
+    slot += entry.slotCount;
     return bin;
   });
 }
@@ -66,7 +69,7 @@ export function classicBins() {
 export function classicExitToBin() {
   const map = new Array(CLASSIC_EXITS);
   classicBins().forEach((bin, binIndex) => {
-    for (let i = 0; i < bin.exitCount; i++) map[bin.exitStart + i] = binIndex;
+    for (let i = 0; i < bin.slotCount; i++) map[bin.slotStart + i] = binIndex;
   });
   return map;
 }
@@ -118,7 +121,7 @@ export function classicProbabilities() {
   const total = weights.reduce((a, b) => a + b, 0);
   const bins = classicBins().map((bin) => {
     let weight = 0;
-    for (let i = 0; i < bin.exitCount; i++) weight += weights[bin.exitStart + i];
+    for (let i = 0; i < bin.slotCount; i++) weight += weights[bin.slotStart + i];
     return { kind: bin.kind, glyph: bin.glyph, color: bin.color, p: weight / total };
   });
   return { bins, total, exits: CLASSIC_EXITS, rows: CLASSIC_ROWS };
