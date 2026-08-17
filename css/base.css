@@ -106,7 +106,20 @@ button:disabled { cursor: default; opacity: 0.45; }
   transition: opacity var(--dur-ceremony) var(--ease-ritual);
 }
 
-.brand { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: var(--r-md);
+  transition: opacity var(--dur-ui) ease;
+}
+.brand:hover { opacity: 0.72; }
+.brand:active { transform: translateY(1px); }
 
 .brand-mark { width: 21px; height: 21px; flex: 0 0 auto; }
 .brand-ball { fill: var(--accent); }
@@ -454,6 +467,13 @@ button:disabled { cursor: default; opacity: 0.45; }
   stroke: var(--groove-sheen);
   stroke-width: calc(var(--floor-w, 22) * 0.16);
   opacity: 0.5;
+}
+
+/* A bridge: panel-coloured, wider than the cut, so the channel it passes over
+   visibly continues underneath instead of appearing to join it. */
+.weave-casing {
+  stroke: var(--panel-casing);
+  stroke-width: calc(var(--groove-w, 30) + 13);
 }
 
 .peg-body { fill: url(#db-peg); }

@@ -3,7 +3,7 @@
  * cache-first; the version string is what invalidates an old install.
  */
 
-const VERSION = 'decision-board-v3';
+const VERSION = 'decision-board-v4';
 
 const ASSETS = [
   '.',

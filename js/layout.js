@@ -11,7 +11,7 @@
  * No DOM here — render.js draws it, animate.js walks it.
  */
 
-import { shapeFor, binsFor } from './tree.js';
+import { shapeFor, binsFor, slotForExit } from './tree.js';
 import { CLASSIC_ROWS, CLASSIC_EXITS, classicBins } from './classic.js';
 
 /**
@@ -26,12 +26,21 @@ export const PANEL = { x: 10, y: 10, w: 980, h: 1220, r: 30 };
 export const PLATE = { h: 32, gap: 8 };
 
 const PAD = 40;          // board edge -> playable area
-const ENTRY_Y = 176;     // where the ball is released
-const FIRST_ROW_Y = 288; // the single top fork
-const LAST_ROW_Y = 946;  // the bottom row of forks
-const BIN_TOP = 1006;
-const BIN_BOTTOM = 1174;
+const ENTRY_Y = 168;     // where the ball is released
+const FIRST_ROW_Y = 250; // the single top fork
+const LAST_ROW_Y = 756;  // the bottom row of forks
+/**
+ * The crossing band: exits are carried sideways to their landing slots.
+ * It needs real height — a strand can travel seven slots, and squeezed into a
+ * shallow band sixteen of those read as a tangle rather than a weave.
+ */
+const WEAVE_TOP = 792;
+const WEAVE_BOTTOM = 1000;
+const BIN_TOP = 1032;
+const BIN_BOTTOM = 1186;
 const STUB = 0.24;       // share of the row gap spent going straight down
+/** The weave spends most of its height crossing rather than dropping. */
+const WEAVE_STUB = 0.18;
 
 const INNER_W = VIEW.w - PAD * 2;
 
@@ -123,18 +132,33 @@ export function buildLayout(k) {
     }
   }
 
-  // Straight drop from each exit into its bin.
+  // Short drop out of the last fork row into the weave.
   for (let exit = 0; exit < exits; exit++) {
     const x = nodeX(depth, exit);
-    segments.push(`M ${x} ${ys[depth]} L ${x} ${BIN_TOP + 6}`);
+    segments.push(`M ${x} ${ys[depth]} L ${x} ${WEAVE_TOP}`);
+  }
+
+  // The weave itself, and the drop from each landing slot into its bin. Each
+  // strand is kept separate so the renderer can decide what crosses over what.
+  const weave = [];
+  for (let exit = 0; exit < exits; exit++) {
+    const from = nodeX(depth, exit);
+    const to = nodeX(depth, slotForExit(exit, depth));
+    weave.push({
+      exit,
+      slot: slotForExit(exit, depth),
+      dx: to - from,
+      d: toPath(forkPoints(from, WEAVE_TOP, to, WEAVE_BOTTOM, WEAVE_STUB)),
+    });
+    segments.push(`M ${to} ${WEAVE_BOTTOM} L ${to} ${BIN_TOP + 6}`);
   }
 
   const binWidth = INNER_W / exits;
   const bins = binsFor(k).map((bin, i) => ({
     ...bin,
     index: i,
-    x: PAD + bin.exitStart * binWidth,
-    width: bin.exitCount * binWidth,
+    x: PAD + bin.slotStart * binWidth,
+    width: bin.slotCount * binWidth,
     y: BIN_TOP,
     height: BIN_BOTTOM - BIN_TOP,
   }));
@@ -147,6 +171,7 @@ export function buildLayout(k) {
     exits,
     ys,
     channelPath: segments.join(' '),
+    weave,
     pegs,
     bins,
     entry: { x: centre, y: ENTRY_Y },
@@ -258,8 +283,8 @@ export function buildClassicLayout() {
   const bins = classicBins().map((bin, i) => ({
     ...bin,
     index: i,
-    x: C_PAD + bin.exitStart * binWidth,
-    width: bin.exitCount * binWidth,
+    x: C_PAD + bin.slotStart * binWidth,
+    width: bin.slotCount * binWidth,
     y: C_BIN_TOP,
     height: C_BIN_BOTTOM - C_BIN_TOP,
   }));
@@ -292,6 +317,7 @@ export function classicRoute(bits) {
   const ys = classicRowYs();
 
   const stages = [[{ x: C_CENTRE, y: C_ENTRY_Y }, { x: C_CENTRE, y: ys[0] }]];
+  const kinds = ['entry'];
 
   // The ball starts on the centre slot and shifts half a step per row. Slots
   // are tracked in grid units, so a left then a right returns it to exactly
@@ -301,14 +327,16 @@ export function classicRoute(bits) {
     const x = classicNodeX(level, slot);
     slot += (bits[level] ? 0.5 : -0.5) + classicRowOffset(level) - classicRowOffset(level + 1);
     stages.push(forkPoints(x, ys[level], classicNodeX(level + 1, slot), ys[level + 1], C_STUB));
+    kinds.push('fork');
   }
 
   const exitX = classicNodeX(CLASSIC_ROWS, slot);
   const plateTop = C_BIN_BOTTOM - CLASSIC_PLATE.gap - CLASSIC_PLATE.h;
   const rest = { x: exitX, y: plateTop - classicGrooveMetrics().ballR + 2 };
   stages.push([{ x: exitX, y: ys[CLASSIC_ROWS] }, rest]);
+  kinds.push('fall');
 
-  return { stages, pegs: stages.map(() => -1), rest };
+  return { stages, pegs: stages.map(() => -1), kinds, rest };
 }
 
 /**
@@ -335,6 +363,7 @@ export function ballRoute(k, bits) {
 
   const stages = [[{ x: centre, y: ENTRY_Y }, { x: centre, y: ys[0] }]];
   const pegs = [pegIndex(0, 0)];
+  const kinds = ['entry'];
 
   let index = 0;
   for (let level = 0; level < depth; level++) {
@@ -342,14 +371,28 @@ export function ballRoute(k, bits) {
     index = index * 2 + bits[level];
     stages.push(forkPoints(x, ys[level], nodeX(level + 1, index), ys[level + 1]));
     pegs.push(level + 1 < depth ? pegIndex(level + 1, index) : -1);
+    kinds.push('fork');
   }
 
-  // The ball comes to rest on the nameplate, not floating in the well.
+  // Out of the forks, across the weave, and down into the slot. The traverse is
+  // its own stage because it is where the answer is actually decided.
   const exitX = nodeX(depth, index);
-  const plateTop = BIN_BOTTOM - PLATE.gap - PLATE.h;
-  const rest = { x: exitX, y: plateTop - grooveMetrics(2 ** depth).ballR + 2 };
-  stages.push([{ x: exitX, y: ys[depth] }, rest]);
-  pegs.push(-1);
+  const slotX = nodeX(depth, slotForExit(index, depth));
 
-  return { stages, pegs, rest };
+  stages.push([{ x: exitX, y: ys[depth] }, { x: exitX, y: WEAVE_TOP }]);
+  pegs.push(-1);
+  kinds.push('approach');
+
+  stages.push(forkPoints(exitX, WEAVE_TOP, slotX, WEAVE_BOTTOM, WEAVE_STUB));
+  pegs.push(-1);
+  kinds.push('weave');
+
+  // The ball comes to rest on the nameplate, not floating in the well.
+  const plateTop = BIN_BOTTOM - PLATE.gap - PLATE.h;
+  const rest = { x: slotX, y: plateTop - grooveMetrics(2 ** depth).ballR + 2 };
+  stages.push([{ x: slotX, y: WEAVE_BOTTOM }, rest]);
+  pegs.push(-1);
+  kinds.push('fall');
+
+  return { stages, pegs, kinds, rest };
 }

@@ -15,7 +15,7 @@
 
 import {
   BOARD_SHAPES, MIN_OPTIONS, MAX_OPTIONS,
-  shapeFor, binsFor, exitToBin, exitFromBits, drop, probabilities,
+  shapeFor, binsFor, exitToBin, slotToBin, slotForExit, exitFromBits, drop, probabilities,
 } from '../js/tree.js';
 
 let failures = 0;
@@ -42,8 +42,8 @@ for (let k = MIN_OPTIONS; k <= MAX_OPTIONS; k++) {
   check('every exit is mapped', map.every((b) => Number.isInteger(b)));
   check(
     'bins tile the row with no gaps or overlaps',
-    bins.reduce((sum, b) => sum + b.exitCount, 0) === exits &&
-      bins.every((b, i) => b.exitStart === (i === 0 ? 0 : bins[i - 1].exitStart + bins[i - 1].exitCount)),
+    bins.reduce((sum, b) => sum + b.slotCount, 0) === exits &&
+      bins.every((b, i) => b.slotStart === (i === 0 ? 0 : bins[i - 1].slotStart + bins[i - 1].slotCount)),
   );
   check(
     'a retry bin exists exactly when there is a remainder to absorb',
@@ -68,6 +68,25 @@ for (let k = MIN_OPTIONS; k <= MAX_OPTIONS; k++) {
   }
 
   check('bits -> exit is a bijection', seen.size === exits, `${seen.size}/${exits} distinct exits`);
+
+  // The weave is only safe because it is a permutation. If two exits ever
+  // shared a slot the channels would have merged and the whole claim would
+  // collapse, so this is the load-bearing assertion for the crossing band.
+  const landed = new Set();
+  for (let exit = 0; exit < exits; exit++) {
+    const slot = slotForExit(exit, depth);
+    if (slot >= 0 && slot < exits) landed.add(slot);
+  }
+  check(
+    'the weave is a bijection — every exit lands in its own slot',
+    landed.size === exits,
+    `${landed.size}/${exits} distinct slots`,
+  );
+  check(
+    'reversing the weave twice is the identity',
+    Array.from({ length: exits }, (_, e) => slotForExit(slotForExit(e, depth), depth))
+      .every((e, i) => e === i),
+  );
   check(
     'every option owns exactly the same number of paths',
     counts.every((c) => c === counts[0]),
@@ -76,6 +95,28 @@ for (let k = MIN_OPTIONS; k <= MAX_OPTIONS; k++) {
   check('option share matches the documented shape', counts[0] === per);
   check('retry share matches the documented shape', retryCount === retry);
   check('all paths accounted for', counts.reduce((a, b) => a + b, 0) + retryCount === exits);
+
+  // No single fork may hand over the answer. Before the weave existed the
+  // first fork settled two options at 87.5%, which made the rest of the
+  // descent decoration; the bound here is what stops that regressing.
+  const slots = slotToBin(k);
+  let worstShare = 0;
+  for (const firstBit of [0, 1]) {
+    const reachable = new Array(bins.length).fill(0);
+    for (let n = 0; n < exits; n++) {
+      const bits = [];
+      for (let i = depth - 1; i >= 0; i--) bits.push((n >> i) & 1);
+      if (bits[0] !== firstBit) continue;
+      reachable[slots[slotForExit(exitFromBits(bits), depth)]]++;
+    }
+    const total = reachable.reduce((a, b) => a + b, 0);
+    worstShare = Math.max(worstShare, ...reachable.map((c) => c / total));
+  }
+  check(
+    'no single fork settles the outcome',
+    worstShare <= 0.55,
+    `worst bin after the first fork: ${(worstShare * 100).toFixed(2)}%`,
+  );
 
   const p = probabilities(k);
   console.log(
@@ -104,7 +145,7 @@ for (let k = MIN_OPTIONS; k <= MAX_OPTIONS; k++) {
   }
 
   const chi2 = bins.reduce((sum, bin, i) => {
-    const expected = TRIALS * (bin.exitCount / exits);
+    const expected = TRIALS * (bin.slotCount / exits);
     return sum + (observed[i] - expected) ** 2 / expected;
   }, 0);
   const df = bins.length - 1;

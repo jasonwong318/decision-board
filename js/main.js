@@ -420,6 +420,14 @@ function wireEvents() {
   $('btn-mode-evolved').addEventListener('click', () => pickMode('evolved'));
   $('btn-mode-back').addEventListener('click', () => showScreen('mode'));
 
+  // The wordmark is the way home. Mid-drop it stays put, so a stray tap cannot
+  // strand a running ceremony on a screen that is no longer showing the board.
+  $('btn-home').addEventListener('click', () => {
+    if (dropping) return;
+    endCeremony();
+    showScreen('mode');
+  });
+
   $('btn-add').addEventListener('click', () => addOptionRow());
 
   $('setup-form').addEventListener('submit', (event) => {
