@@ -11,7 +11,7 @@
  * No DOM here — render.js draws it, animate.js walks it.
  */
 
-import { shapeFor, binsFor, slotForExit } from './tree.js';
+import { shapeFor, binsFor, slotForExit, swapBits, weaveSwaps } from './tree.js';
 import { CLASSIC_ROWS, CLASSIC_EXITS, classicBins } from './classic.js';
 
 /**
@@ -27,17 +27,20 @@ export const PLATE = { h: 32, gap: 8 };
 
 const PAD = 40;          // board edge -> playable area
 const ENTRY_Y = 168;     // where the ball is released
-const FIRST_ROW_Y = 250; // the single top fork
-const LAST_ROW_Y = 756;  // the bottom row of forks
+const FIRST_ROW_Y = 236; // the single top fork
+const LAST_ROW_Y = 648;  // the bottom row of forks
 /**
- * The crossing band: exits are carried sideways to their landing slots.
- * It needs real height — a strand can travel seven slots, and squeezed into a
- * shallow band sixteen of those read as a tangle rather than a weave.
+ * The crossing bands, one per swap in the weave.
+ *
+ * They get a third of the board between them. One band would be quicker to
+ * draw and would look like exactly that: two flat sheets of strands sliding
+ * past each other, all the leftward ones beneath all the rightward ones.
  */
-const WEAVE_TOP = 792;
-const WEAVE_BOTTOM = 1000;
-const BIN_TOP = 1032;
-const BIN_BOTTOM = 1186;
+const WEAVE_TOP = 682;
+const WEAVE_BOTTOM = 972;
+const WEAVE_GAP = 26;    // breathing room between one band and the next
+const BIN_TOP = 1006;
+const BIN_BOTTOM = 1178;
 const STUB = 0.24;       // share of the row gap spent going straight down
 /** The weave spends most of its height crossing rather than dropping. */
 const WEAVE_STUB = 0.18;
@@ -77,6 +80,28 @@ function rowGaps(depth) {
   const total = weights.reduce((a, b) => a + b, 0);
   const span = LAST_ROW_Y - FIRST_ROW_Y;
   return weights.map((w) => (span * w) / total);
+}
+
+/**
+ * One band per swap: where it sits, and where every channel enters and leaves.
+ *
+ * `before[i]` is the position channel i occupies entering the band and
+ * `after[i]` where it leaves; both are indexed by the *original exit*, so a
+ * single strand can be followed straight down through every band.
+ */
+function weaveBands(depth) {
+  const swaps = weaveSwaps(depth);
+  const height = (WEAVE_BOTTOM - WEAVE_TOP - WEAVE_GAP * (swaps.length - 1)) / swaps.length;
+  const exits = 2 ** depth;
+
+  let positions = Array.from({ length: exits }, (_, exit) => exit);
+  return swaps.map(([i, j], band) => {
+    const before = positions;
+    const after = positions.map((p) => swapBits(p, i, j));
+    positions = after;
+    const top = WEAVE_TOP + band * (height + WEAVE_GAP);
+    return { before, after, top, bottom: top + height };
+  });
 }
 
 /** y of each fork row, length depth + 1. */
@@ -132,25 +157,34 @@ export function buildLayout(k) {
     }
   }
 
-  // Short drop out of the last fork row into the weave.
+  // Short drop out of the last fork row into the first crossing band.
   for (let exit = 0; exit < exits; exit++) {
     const x = nodeX(depth, exit);
     segments.push(`M ${x} ${ys[depth]} L ${x} ${WEAVE_TOP}`);
   }
 
-  // The weave itself, and the drop from each landing slot into its bin. Each
-  // strand is kept separate so the renderer can decide what crosses over what.
+  // The crossing bands. Each strand is kept separate so the renderer can decide
+  // what passes over what; `band` lets it alternate the answer per band rather
+  // than laying every leftward strand under every rightward one.
+  const bands = weaveBands(depth);
   const weave = [];
-  for (let exit = 0; exit < exits; exit++) {
-    const from = nodeX(depth, exit);
-    const to = nodeX(depth, slotForExit(exit, depth));
-    weave.push({
-      exit,
-      slot: slotForExit(exit, depth),
-      dx: to - from,
-      d: toPath(forkPoints(from, WEAVE_TOP, to, WEAVE_BOTTOM, WEAVE_STUB)),
-    });
-    segments.push(`M ${to} ${WEAVE_BOTTOM} L ${to} ${BIN_TOP + 6}`);
+  for (const [band, span] of bands.entries()) {
+    for (let index = 0; index < exits; index++) {
+      const from = nodeX(depth, span.before[index]);
+      const to = nodeX(depth, span.after[index]);
+      weave.push({
+        band,
+        index,
+        dx: to - from,
+        d: toPath(forkPoints(from, span.top, to, span.bottom, WEAVE_STUB)),
+      });
+    }
+  }
+
+  // Landing slot down into its bin.
+  for (let slot = 0; slot < exits; slot++) {
+    const x = nodeX(depth, slot);
+    segments.push(`M ${x} ${WEAVE_BOTTOM} L ${x} ${BIN_TOP + 6}`);
   }
 
   const binWidth = INNER_W / exits;
@@ -190,121 +224,120 @@ export const CLASSIC_VIEW = { w: 1000, h: 1000 };
 export const CLASSIC_PANEL = { x: 12, y: 12, w: 976, h: 976, r: 20 };
 
 /**
- * How the toy actually works, and therefore how it is drawn.
+ * How the toy is built, and therefore how it is drawn.
  *
- * The maze is rows of long horizontal capsules, each row offset by half a
- * capsule from the one above. A ball entering a capsule lands at its *middle*,
- * rolls to one end or the other, and drops through to the row below — where
- * that end is the middle of the next capsule. So one fork is one horizontal
- * run plus one short drop, and the ball moves half a capsule sideways per row.
+ * The slots are far longer than the distance the ball actually travels between
+ * decisions, and they overlap their neighbours — that overlap, plus a small
+ * difference in height between one slot and the next along a row, is the whole
+ * source of the panel's chain-link texture. Drawing each slot end-to-end at a
+ * single height, as an earlier attempt did, collapses every row into one
+ * unbroken rail and the object disappears.
  *
- * That is the same lattice the maths already uses; the earlier drawing rendered
- * each fork as a short diagonal, which collapsed the rows into a honeycomb and
- * lost the object entirely.
- *
- * `C_RUN` is half a capsule and the ball's step. Six rows carry it up to six
- * steps from centre, and a capsule reaches one step further than its centre, so
- * the widest thing on the panel is 7 × C_RUN either side — that is what sets it.
+ * C_STEP is what the ball moves per row, so nodes on a row sit 2 × C_STEP
+ * apart; a slot reaches 2 × C_STEP either side of its node, which is twice as
+ * far as the ball will ever roll inside it. The ball leaves through the first
+ * hole it meets, one step along, and the rest of the slot is simply the panel
+ * being milled the way the photograph shows.
  */
-const C_RUN = 62;
-const C_REACH = 7 * C_RUN;
-/**
- * The divider between two capsules on the same row.
- *
- * Neighbouring capsules are exactly 2 × C_RUN apart, so drawn at full length
- * they meet end to end and every row reads as one unbroken rail. The real panel
- * cannot be built that way — without a wall at each end the ball would roll
- * straight past instead of dropping — and it is that wall, more than anything,
- * that makes the slots read as separate capsules.
- */
-const C_WALL = 20;
+const C_STEP = 58;
+const C_SLOT = 1.5 * C_STEP;
+/** Neighbouring slots on a row sit slightly above and below each other. */
+const C_STAGGER = 23;
 
 const C_CENTRE = CLASSIC_VIEW.w / 2;
-const C_ENTRY_Y = 130;
-const C_FIRST_ROW_Y = 236;
-const C_ROW_GAP = 74;
+const C_ENTRY_Y = 118;
+const C_FIRST_ROW_Y = 196;
+const C_ROW_GAP = 86;
 const C_LAST_ROW_Y = C_FIRST_ROW_Y + C_ROW_GAP * CLASSIC_ROWS;
-/** The three brass stops the ball comes to rest against. */
-const C_STOP_Y = 816;
-/** The printed ✕ ↻ ✓, below the stops on the bare panel. */
-const C_MARK_Y = 900;
-const C_STOP_R = 15;
+/** The three stops: black pills, as they are printed on the panel. */
+const C_STOP_Y = 818;
+const C_STOP_W = 88;
+const C_STOP_H = 30;
+const C_MARK_Y = 896;
+const C_STOP_X = [200, 500, 800];
 
-function classicRowY(level) {
-  return C_FIRST_ROW_Y + C_ROW_GAP * level;
-}
-
-/** Capsule centres on a row; alternate rows are offset by half a capsule. */
-function classicRowCentres(level) {
-  const offset = level % 2;
+/** Rows alternate parity: the ball is only ever on a node of its row's parity. */
+function classicNodes(level) {
   const out = [];
-  for (let m = -12; m <= 12; m++) {
-    const cx = C_CENTRE + (2 * m + offset) * C_RUN;
-    if (Math.abs(cx - C_CENTRE) + C_RUN <= C_REACH + 0.01) out.push(cx);
+  for (let p = -CLASSIC_ROWS; p <= CLASSIC_ROWS; p++) {
+    if (((p % 2) + 2) % 2 === level % 2) out.push(p);
   }
   return out;
 }
 
-/** Where exit `k` sits on the bottom row: k rights and (rows - k) lefts. */
-function classicExitX(k) {
-  return C_CENTRE + (2 * k - CLASSIC_ROWS) * C_RUN;
+function classicNodeX(p) {
+  return C_CENTRE + p * C_STEP;
 }
 
-/** Slots are wide enough to swallow the ball, narrow against a long capsule. */
+/** Slot height on its row — neighbours are staggered so they can overlap. */
+function classicNodeY(level, p) {
+  const rank = Math.round((p - (level % 2)) / 2);
+  return C_FIRST_ROW_Y + C_ROW_GAP * level + (((rank % 2) + 2) % 2 === 0 ? -C_STAGGER : C_STAGGER);
+}
+
 function classicGrooveMetrics() {
-  const groove = 32;
-  // The ball has to sit *inside* the slot, so it is sized off the cut rather
-  // than off the floor highlight the way the evolved board does it.
-  return { groove, floor: groove * 0.68, ballR: groove * 0.40 };
+  // Narrow enough that red shows between the slots, which is most of what the
+  // panel's texture is; the ball is sized off the cut so it sits inside it.
+  const groove = 24;
+  return { groove, floor: groove * 0.66, ballR: groove * 0.4 };
 }
 
-/** The three stops, placed at the centroid of the exits that feed them. */
+/** Which stop an exit feeds, and where that stop sits. */
 function classicStops() {
-  return classicBins().map((bin, index) => {
-    let sum = 0;
-    for (let i = 0; i < bin.slotCount; i++) sum += classicExitX(bin.slotStart + i);
-    return {
-      ...bin,
-      index,
-      x: sum / bin.slotCount,
-      y: C_STOP_Y,
-      markY: C_MARK_Y,
-      r: C_STOP_R,
-    };
-  });
+  return classicBins().map((bin, index) => ({
+    ...bin,
+    index,
+    x: C_STOP_X[index],
+    y: C_STOP_Y,
+    w: C_STOP_W,
+    h: C_STOP_H,
+    markY: C_MARK_Y,
+  }));
+}
+
+/** Exit k is p = 2k - rows on the bottom row. */
+function classicExitP(k) {
+  return 2 * k - CLASSIC_ROWS;
+}
+
+function classicStopFor(k) {
+  return classicStops().find((b) => k >= b.slotStart && k < b.slotStart + b.slotCount);
 }
 
 export function buildClassicLayout() {
-  const segments = [`M ${C_CENTRE} ${C_ENTRY_Y} L ${C_CENTRE} ${classicRowY(0)}`];
+  const segments = [`M ${C_CENTRE} ${C_ENTRY_Y} L ${C_CENTRE} ${classicNodeY(0, 0).toFixed(2)}`];
 
-  // The capsules themselves, milled right across the panel — including the
-  // ones at the edges that the ball can never reach.
+  // The slots, milled right across the panel — including the ones out at the
+  // edges that the ball can never reach.
   for (let level = 0; level <= CLASSIC_ROWS; level++) {
-    const y = classicRowY(level);
-    for (const cx of classicRowCentres(level)) {
-      const half = C_RUN - C_WALL;
-      segments.push(`M ${(cx - half).toFixed(2)} ${y} L ${(cx + half).toFixed(2)} ${y}`);
+    for (const p of classicNodes(level)) {
+      const x = classicNodeX(p);
+      const y = classicNodeY(level, p).toFixed(2);
+      segments.push(`M ${(x - C_SLOT).toFixed(2)} ${y} L ${(x + C_SLOT).toFixed(2)} ${y}`);
     }
   }
 
-  // The short drops joining one capsule's end to the next capsule's middle.
+  // The holes joining one slot to the slot a step along on the row below.
   for (let level = 0; level < CLASSIC_ROWS; level++) {
-    const below = new Set(classicRowCentres(level + 1).map((x) => x.toFixed(2)));
-    for (const cx of classicRowCentres(level)) {
-      for (const end of [cx - C_RUN, cx + C_RUN]) {
-        if (!below.has(end.toFixed(2))) continue;
-        segments.push(`M ${end.toFixed(2)} ${classicRowY(level)} L ${end.toFixed(2)} ${classicRowY(level + 1)}`);
+    const below = new Set(classicNodes(level + 1));
+    for (const p of classicNodes(level)) {
+      for (const q of [p - 1, p + 1]) {
+        if (!below.has(q)) continue;
+        segments.push(
+          `M ${classicNodeX(q).toFixed(2)} ${classicNodeY(level, p).toFixed(2)}`
+          + ` L ${classicNodeX(q).toFixed(2)} ${classicNodeY(level + 1, q).toFixed(2)}`,
+        );
       }
     }
   }
 
-  // Out of the bottom row and into the three stops. These channels converge,
-  // which on this board is honest — its channels merge by design.
-  const bins = classicStops();
+  // Out of the bottom row into the three stops. These converge, which on this
+  // board is honest — its channels merge by design.
   for (let k = 0; k < CLASSIC_EXITS; k++) {
-    const from = classicExitX(k);
-    const stop = bins.find((b) => k >= b.slotStart && k < b.slotStart + b.slotCount);
-    segments.push(toPath(forkPoints(from, C_LAST_ROW_Y, stop.x, C_STOP_Y, 0.3)));
+    const p = classicExitP(k);
+    segments.push(toPath(forkPoints(
+      classicNodeX(p), classicNodeY(CLASSIC_ROWS, p), classicStopFor(k).x, C_STOP_Y, 0.3,
+    )));
   }
 
   return {
@@ -314,46 +347,51 @@ export function buildClassicLayout() {
     exits: CLASSIC_EXITS,
     channelPath: segments.join(' '),
     pegs: [],
-    bins,
+    bins: classicStops(),
     entry: { x: C_CENTRE, y: C_ENTRY_Y },
     ...classicGrooveMetrics(),
   };
 }
 
 /**
- * The classic ball's route: a horizontal roll and a drop, six times over, then
- * down into a stop. `pegs` is all -1 — the panel has no pins in the maze.
+ * The classic ball's route: roll along a slot, drop through, six times over,
+ * then down into a stop. `pegs` is all -1 — the panel has no pins in the maze.
  *
  * @param {(0|1)[]} bits one per row, 1 = roll right
  */
 export function classicRoute(bits) {
-  const stages = [[{ x: C_CENTRE, y: C_ENTRY_Y }, { x: C_CENTRE, y: classicRowY(0) }]];
+  const stages = [[
+    { x: C_CENTRE, y: C_ENTRY_Y },
+    { x: C_CENTRE, y: classicNodeY(0, 0) },
+  ]];
   const kinds = ['entry'];
 
-  let x = C_CENTRE;
+  let p = 0;
   for (let level = 0; level < CLASSIC_ROWS; level++) {
-    const y = classicRowY(level);
-    const end = x + (bits[level] ? C_RUN : -C_RUN);
-    // Roll the length of the capsule, then fall through to the row below.
-    stages.push([{ x, y }, { x: end, y }, { x: end, y: classicRowY(level + 1) }]);
+    const y = classicNodeY(level, p);
+    const q = p + (bits[level] ? 1 : -1);
+    // Roll along the slot to the hole, then fall through to the row below.
+    stages.push([
+      { x: classicNodeX(p), y },
+      { x: classicNodeX(q), y },
+      { x: classicNodeX(q), y: classicNodeY(level + 1, q) },
+    ]);
     kinds.push('fork');
-    x = end;
+    p = q;
   }
 
-  const stop = classicStops().find((b) => {
-    const k = Math.round((x - C_CENTRE) / (2 * C_RUN) + CLASSIC_ROWS / 2);
-    return k >= b.slotStart && k < b.slotStart + b.slotCount;
-  });
-  const rest = { x: stop.x, y: C_STOP_Y - C_STOP_R - classicGrooveMetrics().ballR + 4 };
-  stages.push(toRoutePoints(forkPoints(x, C_LAST_ROW_Y, stop.x, C_STOP_Y, 0.3), rest));
+  const stop = classicStopFor((p + CLASSIC_ROWS) / 2);
+  const rest = {
+    x: stop.x,
+    y: C_STOP_Y - C_STOP_H / 2 - classicGrooveMetrics().ballR + 6,
+  };
+  const run = forkPoints(
+    classicNodeX(p), classicNodeY(CLASSIC_ROWS, p), stop.x, C_STOP_Y, 0.3,
+  );
+  stages.push([...run.slice(0, -1), rest]);
   kinds.push('fall');
 
   return { stages, pegs: stages.map(() => -1), kinds, rest };
-}
-
-/** The routed channel, but stopping short where the ball actually rests. */
-function toRoutePoints(points, rest) {
-  return [...points.slice(0, -1), rest];
 }
 
 /**
@@ -391,18 +429,27 @@ export function ballRoute(k, bits) {
     kinds.push('fork');
   }
 
-  // Out of the forks, across the weave, and down into the slot. The traverse is
-  // its own stage because it is where the answer is actually decided.
+  // Out of the forks and down through every crossing band. Each band is its own
+  // stage, because each one is a place where the answer could still change.
   const exitX = nodeX(depth, index);
-  const slotX = nodeX(depth, slotForExit(index, depth));
 
   stages.push([{ x: exitX, y: ys[depth] }, { x: exitX, y: WEAVE_TOP }]);
   pegs.push(-1);
   kinds.push('approach');
 
-  stages.push(forkPoints(exitX, WEAVE_TOP, slotX, WEAVE_BOTTOM, WEAVE_STUB));
-  pegs.push(-1);
-  kinds.push('weave');
+  // Both arrays are indexed by the original exit, so this ball is simply
+  // `index` in every band — no searching for where it ended up.
+  for (const band of weaveBands(depth)) {
+    stages.push(forkPoints(
+      nodeX(depth, band.before[index]), band.top,
+      nodeX(depth, band.after[index]), band.bottom,
+      WEAVE_STUB,
+    ));
+    pegs.push(-1);
+    kinds.push('weave');
+  }
+
+  const slotX = nodeX(depth, slotForExit(index, depth));
 
   // The ball comes to rest on the nameplate, not floating in the well.
   const plateTop = BIN_BOTTOM - PLATE.gap - PLATE.h;

@@ -132,20 +132,27 @@ function channels(layout) {
 }
 
 /**
- * The crossing band, drawn strand by strand.
+ * The crossing bands, drawn strand by strand.
  *
  * These channels cross; they never merge, and the drawing has to say so or the
  * board's whole claim looks false. Each strand that passes over another carries
  * a casing in the panel's own colour, which reads as a bridge: the groove
  * underneath visibly runs on beneath it.
  *
- * Strands moving left are laid down first and those moving right on top, so
- * every crossing resolves the same way and the band reads as woven rather than
- * as a tangle. A strand that does not move sideways needs no bridge at all.
+ * What decides the order matters more than it sounds. Sorting purely by
+ * direction — every leftward strand under every rightward one — produces two
+ * flat sheets sliding past each other, which is not weaving. Sorting by the
+ * parity of the channel instead makes neighbours alternate over and under, and
+ * flipping that parity from one band to the next stops the same channel staying
+ * on top the whole way down. A strand that does not move needs no bridge.
  */
 function weave(strands) {
   const group = el('g', { class: 'weave' });
-  const ordered = [...strands].sort((a, b) => a.dx - b.dx);
+  const ordered = [...strands].sort((a, b) => (
+    a.band - b.band
+    || ((a.index + a.band) % 2) - ((b.index + b.band) % 2)
+    || Math.abs(b.dx) - Math.abs(a.dx)
+  ));
 
   for (const strand of ordered) {
     const layer = el('g', { class: 'weave-strand' });
@@ -211,10 +218,19 @@ function classicStop(bin) {
   const group = el('g', { class: `bin bin-${bin.kind} bin-classic` });
   group.style.setProperty('--bin-color', binColor(bin));
 
-  group.append(el('circle', {
-    class: 'bin-bloom', cx: bin.x, cy: bin.y, r: bin.r * 2.8, filter: 'url(#db-bloom)',
+  group.append(el('rect', {
+    class: 'bin-bloom',
+    x: bin.x - bin.w, y: bin.y - bin.h,
+    width: bin.w * 2, height: bin.h * 2,
+    rx: bin.h,
+    filter: 'url(#db-bloom)',
   }));
-  group.append(rivet(bin.x, bin.y, bin.r));
+  group.append(el('rect', {
+    class: 'bin-stop',
+    x: bin.x - bin.w / 2, y: bin.y - bin.h / 2,
+    width: bin.w, height: bin.h,
+    rx: bin.h / 2,
+  }));
 
   const label = el('text', {
     class: 'bin-label bin-glyph',
@@ -282,9 +298,15 @@ export function renderBoard(svg, spec) {
   }
   svg.append(bins);
 
-  // The classic panel has a knob where the ball is loaded; the evolved board
-  // releases from an open channel, so it gets the pulse instead.
-  if (classic) svg.append(rivet(layout.entry.x, layout.entry.y - layout.ballR - 16, 11));
+  // The classic panel has a loading slot at the top; the evolved board releases
+  // from an open channel, so it gets the pulse instead.
+  if (classic) {
+    svg.append(el('rect', {
+      class: 'bin-stop entry-slot',
+      x: layout.entry.x - 26, y: layout.entry.y - 34,
+      width: 52, height: 24, rx: 12,
+    }));
+  }
 
   const pulse = el('g', {
     class: 'entry-pulse', transform: `translate(${layout.entry.x} ${layout.entry.y})`,

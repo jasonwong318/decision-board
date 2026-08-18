@@ -108,6 +108,32 @@ export function slotForExit(exit, depth) {
   return slot;
 }
 
+/** Exchange two bits of `x`. A no-op when they already agree. */
+export function swapBits(x, i, j) {
+  const bi = (x >> i) & 1;
+  const bj = (x >> j) & 1;
+  return bi === bj ? x : x ^ ((1 << i) | (1 << j));
+}
+
+/**
+ * Bit reversal, taken apart into the swaps it is made of.
+ *
+ * Reversing d bits is the same as exchanging bit i with bit d-1-i for every i
+ * below the middle, and each of those exchanges is a permutation in its own
+ * right. Drawing them as separate crossing bands rather than one is what turns
+ * the weave from two flat sheets sliding past each other into something with
+ * layers — and it spreads the crossings down the board instead of piling them
+ * all into the last inch before the bins.
+ *
+ * @param {number} depth
+ * @returns {[number, number][]} bit pairs, applied in order
+ */
+export function weaveSwaps(depth) {
+  const swaps = [];
+  for (let i = 0; i < Math.floor(depth / 2); i++) swaps.push([i, depth - 1 - i]);
+  return swaps;
+}
+
 /**
  * Slot index -> bin index, precomputed for the whole bottom row.
  * @param {number} k

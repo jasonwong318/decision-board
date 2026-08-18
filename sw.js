@@ -16,7 +16,7 @@
  * precache covers the whole app.
  */
 
-const VERSION = 'decision-board-v5';
+const VERSION = 'decision-board-v6';
 
 const ASSETS = [
   '.',
