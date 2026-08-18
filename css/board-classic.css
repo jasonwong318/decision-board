@@ -56,9 +56,14 @@
   letter-spacing: 0;
 }
 
-/* Landing lights the mark and blooms warm around the screw it rests against. */
+/* The stops are printed pills, the same black as the slots. */
+.bin-stop { fill: var(--groove); }
+.entry-slot { pointer-events: none; }
+
+/* Landing lights the mark and blooms warm around the pill it rests on. */
 .app[data-mode="classic"] .bin-bloom { fill: #ffcf6a; opacity: 0; }
-.app[data-mode="classic"] .bin.is-won .bin-bloom { opacity: 0.62; }
+.app[data-mode="classic"] .bin.is-won .bin-bloom { opacity: 0.6; }
 .app[data-mode="classic"] .bin.is-won .bin-label { fill: var(--bin-text-won); }
+.app[data-mode="classic"] .bin.is-won .bin-stop { fill: #2a1206; }
 
 .rivet { pointer-events: none; }

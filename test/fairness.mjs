@@ -16,6 +16,7 @@
 import {
   BOARD_SHAPES, MIN_OPTIONS, MAX_OPTIONS,
   shapeFor, binsFor, exitToBin, slotToBin, slotForExit, exitFromBits, drop, probabilities,
+  swapBits, weaveSwaps,
 } from '../js/tree.js';
 
 let failures = 0;
@@ -86,6 +87,16 @@ for (let k = MIN_OPTIONS; k <= MAX_OPTIONS; k++) {
     'reversing the weave twice is the identity',
     Array.from({ length: exits }, (_, e) => slotForExit(slotForExit(e, depth), depth))
       .every((e, i) => e === i),
+  );
+  // The weave is drawn as one band per swap. If the bands ever stopped
+  // composing back to the reversal the picture and the maths would disagree,
+  // and the picture is the part nobody would think to re-derive.
+  check(
+    'the crossing bands compose back to the whole weave',
+    Array.from({ length: exits }, (_, e) => (
+      weaveSwaps(depth).reduce((x, [i, j]) => swapBits(x, i, j), e)
+    )).every((got, e) => got === slotForExit(e, depth)),
+    `${weaveSwaps(depth).length} band(s)`,
   );
   check(
     'every option owns exactly the same number of paths',
