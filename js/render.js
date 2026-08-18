@@ -201,30 +201,25 @@ function evolvedBin(bin, plate) {
   return group;
 }
 
-/** Classic bottom edge: the printed mark above a brass stop. */
-function classicBin(bin, plate) {
+/**
+ * Classic bottom edge: a stop, and the mark printed on the bare panel below it.
+ *
+ * No wells and no nameplates — the object has neither. The channels simply end
+ * at a screw, and ✕ ↻ ✓ are painted on the red underneath.
+ */
+function classicStop(bin) {
   const group = el('g', { class: `bin bin-${bin.kind} bin-classic` });
   group.style.setProperty('--bin-color', binColor(bin));
 
-  const x = bin.x + 4;
-  const width = bin.width - 8;
-  const inset = Math.min(10, width * 0.14);
-  const plateY = bin.y + bin.height - plate.h - plate.gap;
-
-  group.append(el('rect', {
-    class: 'bin-bloom', x, y: bin.y, width, height: bin.height, rx: 12, filter: 'url(#db-bloom)',
+  group.append(el('circle', {
+    class: 'bin-bloom', cx: bin.x, cy: bin.y, r: bin.r * 2.8, filter: 'url(#db-bloom)',
   }));
-  group.append(el('rect', { class: 'bin-well', x, y: bin.y, width, height: bin.height, rx: 12 }));
-  group.append(el('rect', {
-    class: 'bin-plate',
-    x: x + inset, y: plateY, width: width - inset * 2, height: plate.h, rx: 7,
-  }));
-  group.append(rivet(bin.x + bin.width / 2, plateY + plate.h / 2, plate.h * 0.34));
+  group.append(rivet(bin.x, bin.y, bin.r));
 
   const label = el('text', {
     class: 'bin-label bin-glyph',
-    x: bin.x + bin.width / 2,
-    y: bin.y + (plateY - bin.y) / 2,
+    x: bin.x,
+    y: bin.markY,
     'text-anchor': 'middle',
     'dominant-baseline': 'middle',
   });
@@ -281,7 +276,7 @@ export function renderBoard(svg, spec) {
   const binNodes = [];
   const bins = el('g', { class: 'bins' });
   for (const bin of layout.bins) {
-    const group = classic ? classicBin(bin, plate) : evolvedBin(bin, plate);
+    const group = classic ? classicStop(bin) : evolvedBin(bin, plate);
     binNodes.push(group);
     bins.append(group);
   }

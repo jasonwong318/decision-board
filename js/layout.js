@@ -187,156 +187,173 @@ export function buildLayout(k) {
  * The classic board is square, because the object is: a 40 × 40 panel.
  */
 export const CLASSIC_VIEW = { w: 1000, h: 1000 };
-export const CLASSIC_PANEL = { x: 10, y: 10, w: 980, h: 980, r: 26 };
-export const CLASSIC_PLATE = { h: 26, gap: 10 };
-
-const C_PAD = 70;
-const C_ENTRY_Y = 150;
-const C_FIRST_ROW_Y = 244;
-const C_LAST_ROW_Y = 664;
-const C_BIN_TOP = 726;
-const C_BIN_BOTTOM = 906;
-/** Most of each drop is spent going straight, which flattens the runs. */
-const C_STUB = 0.42;
-
-const C_INNER_W = CLASSIC_VIEW.w - C_PAD * 2;
-/** Spacing between nodes on the same row; a fork moves the ball half of it. */
-const C_STEP = C_INNER_W / CLASSIC_EXITS;
-const C_CENTRE = C_PAD + C_INNER_W / 2;
+export const CLASSIC_PANEL = { x: 12, y: 12, w: 976, h: 976, r: 20 };
 
 /**
- * The maze is milled across the whole panel, so every row is drawn full width
- * on a fixed grid — alternate rows offset by half a step, which is what gives
- * the toy its dense field of interlocking horizontal runs.
+ * How the toy actually works, and therefore how it is drawn.
  *
- * The ball only ever reaches a triangle inside that field: entering at the
- * centre and moving half a step per row, after six rows it can be at any of
- * seven exits. The slots it never touches are milled all the same, exactly as
- * they are on the object.
+ * The maze is rows of long horizontal capsules, each row offset by half a
+ * capsule from the one above. A ball entering a capsule lands at its *middle*,
+ * rolls to one end or the other, and drops through to the row below — where
+ * that end is the middle of the next capsule. So one fork is one horizontal
+ * run plus one short drop, and the ball moves half a capsule sideways per row.
+ *
+ * That is the same lattice the maths already uses; the earlier drawing rendered
+ * each fork as a short diagonal, which collapsed the rows into a honeycomb and
+ * lost the object entirely.
+ *
+ * `C_RUN` is half a capsule and the ball's step. Six rows carry it up to six
+ * steps from centre, and a capsule reaches one step further than its centre, so
+ * the widest thing on the panel is 7 × C_RUN either side — that is what sets it.
  */
-function classicRowOffset(level) {
-  return level % 2 === 0 ? 0 : 0.5;
+const C_RUN = 62;
+const C_REACH = 7 * C_RUN;
+/**
+ * The divider between two capsules on the same row.
+ *
+ * Neighbouring capsules are exactly 2 × C_RUN apart, so drawn at full length
+ * they meet end to end and every row reads as one unbroken rail. The real panel
+ * cannot be built that way — without a wall at each end the ball would roll
+ * straight past instead of dropping — and it is that wall, more than anything,
+ * that makes the slots read as separate capsules.
+ */
+const C_WALL = 20;
+
+const C_CENTRE = CLASSIC_VIEW.w / 2;
+const C_ENTRY_Y = 130;
+const C_FIRST_ROW_Y = 236;
+const C_ROW_GAP = 74;
+const C_LAST_ROW_Y = C_FIRST_ROW_Y + C_ROW_GAP * CLASSIC_ROWS;
+/** The three brass stops the ball comes to rest against. */
+const C_STOP_Y = 816;
+/** The printed ✕ ↻ ✓, below the stops on the bare panel. */
+const C_MARK_Y = 900;
+const C_STOP_R = 15;
+
+function classicRowY(level) {
+  return C_FIRST_ROW_Y + C_ROW_GAP * level;
 }
 
-/** Node x for the grid slot `m` on `level`; m counts out from the centre. */
-function classicNodeX(level, m) {
-  return C_CENTRE + (m + classicRowOffset(level)) * C_STEP;
-}
-
-/** Every grid slot on a row that fits inside the playable area. */
-function classicRowSlots(level) {
-  const offset = classicRowOffset(level);
-  const reach = C_INNER_W / 2;
-  const slots = [];
-  for (let m = -CLASSIC_EXITS; m <= CLASSIC_EXITS; m++) {
-    // A half-step of tolerance keeps the outermost node on an offset row from
-    // being dropped for a rounding error at exactly the edge.
-    if (Math.abs((m + offset) * C_STEP) <= reach + 0.01) slots.push(m);
+/** Capsule centres on a row; alternate rows are offset by half a capsule. */
+function classicRowCentres(level) {
+  const offset = level % 2;
+  const out = [];
+  for (let m = -12; m <= 12; m++) {
+    const cx = C_CENTRE + (2 * m + offset) * C_RUN;
+    if (Math.abs(cx - C_CENTRE) + C_RUN <= C_REACH + 0.01) out.push(cx);
   }
-  return slots;
+  return out;
 }
 
-function classicRowYs() {
-  const gap = (C_LAST_ROW_Y - C_FIRST_ROW_Y) / CLASSIC_ROWS;
-  return Array.from({ length: CLASSIC_ROWS + 1 }, (_, i) => C_FIRST_ROW_Y + gap * i);
+/** Where exit `k` sits on the bottom row: k rights and (rows - k) lefts. */
+function classicExitX(k) {
+  return C_CENTRE + (2 * k - CLASSIC_ROWS) * C_RUN;
 }
 
-/** Wide, chunky slots, like the milled channels on the panel. */
+/** Slots are wide enough to swallow the ball, narrow against a long capsule. */
 function classicGrooveMetrics() {
-  const groove = Math.min(30, C_STEP * 0.24);
-  const floor = groove * 0.72;
-  return { groove, floor, ballR: Math.max(7, floor * 0.75) };
+  const groove = 32;
+  // The ball has to sit *inside* the slot, so it is sized off the cut rather
+  // than off the floor highlight the way the evolved board does it.
+  return { groove, floor: groove * 0.68, ballR: groove * 0.40 };
 }
 
-/** The ball's grid slot after `rights` right-steps, from a centre entry. */
-function classicExitSlot(rights) {
-  return rights - CLASSIC_ROWS / 2;
+/** The three stops, placed at the centroid of the exits that feed them. */
+function classicStops() {
+  return classicBins().map((bin, index) => {
+    let sum = 0;
+    for (let i = 0; i < bin.slotCount; i++) sum += classicExitX(bin.slotStart + i);
+    return {
+      ...bin,
+      index,
+      x: sum / bin.slotCount,
+      y: C_STOP_Y,
+      markY: C_MARK_Y,
+      r: C_STOP_R,
+    };
+  });
 }
 
-/** @returns {object} the same shape buildLayout returns, minus the pegs. */
 export function buildClassicLayout() {
-  const ys = classicRowYs();
+  const segments = [`M ${C_CENTRE} ${C_ENTRY_Y} L ${C_CENTRE} ${classicRowY(0)}`];
 
-  const segments = [`M ${C_CENTRE} ${C_ENTRY_Y} L ${C_CENTRE} ${ys[0]}`];
+  // The capsules themselves, milled right across the panel — including the
+  // ones at the edges that the ball can never reach.
+  for (let level = 0; level <= CLASSIC_ROWS; level++) {
+    const y = classicRowY(level);
+    for (const cx of classicRowCentres(level)) {
+      const half = C_RUN - C_WALL;
+      segments.push(`M ${(cx - half).toFixed(2)} ${y} L ${(cx + half).toFixed(2)} ${y}`);
+    }
+  }
 
+  // The short drops joining one capsule's end to the next capsule's middle.
   for (let level = 0; level < CLASSIC_ROWS; level++) {
-    const below = new Set(classicRowSlots(level + 1));
-    const shift = classicRowOffset(level) - classicRowOffset(level + 1);
-    for (const m of classicRowSlots(level)) {
-      const x = classicNodeX(level, m);
-      // A fork moves half a step either way; on the grid that is these two.
-      for (const child of [m + shift - 0.5, m + shift + 0.5]) {
-        if (!below.has(child)) continue;
-        segments.push(toPath(
-          forkPoints(x, ys[level], classicNodeX(level + 1, child), ys[level + 1], C_STUB),
-        ));
+    const below = new Set(classicRowCentres(level + 1).map((x) => x.toFixed(2)));
+    for (const cx of classicRowCentres(level)) {
+      for (const end of [cx - C_RUN, cx + C_RUN]) {
+        if (!below.has(end.toFixed(2))) continue;
+        segments.push(`M ${end.toFixed(2)} ${classicRowY(level)} L ${end.toFixed(2)} ${classicRowY(level + 1)}`);
       }
     }
   }
 
-  for (let exit = 0; exit < CLASSIC_EXITS; exit++) {
-    const x = classicNodeX(CLASSIC_ROWS, classicExitSlot(exit));
-    segments.push(`M ${x} ${ys[CLASSIC_ROWS]} L ${x} ${C_BIN_TOP + 6}`);
+  // Out of the bottom row and into the three stops. These channels converge,
+  // which on this board is honest — its channels merge by design.
+  const bins = classicStops();
+  for (let k = 0; k < CLASSIC_EXITS; k++) {
+    const from = classicExitX(k);
+    const stop = bins.find((b) => k >= b.slotStart && k < b.slotStart + b.slotCount);
+    segments.push(toPath(forkPoints(from, C_LAST_ROW_Y, stop.x, C_STOP_Y, 0.3)));
   }
-
-  const binWidth = C_INNER_W / CLASSIC_EXITS;
-  const bins = classicBins().map((bin, i) => ({
-    ...bin,
-    index: i,
-    x: C_PAD + bin.slotStart * binWidth,
-    width: bin.slotCount * binWidth,
-    y: C_BIN_TOP,
-    height: C_BIN_BOTTOM - C_BIN_TOP,
-  }));
 
   return {
     view: CLASSIC_VIEW,
     panel: CLASSIC_PANEL,
-    plate: CLASSIC_PLATE,
     depth: CLASSIC_ROWS,
     exits: CLASSIC_EXITS,
-    ys,
     channelPath: segments.join(' '),
     pegs: [],
     bins,
     entry: { x: C_CENTRE, y: C_ENTRY_Y },
-    binTop: C_BIN_TOP,
-    binBottom: C_BIN_BOTTOM,
     ...classicGrooveMetrics(),
   };
 }
 
 /**
- * The classic ball's route. `pegs` is all -1: the real panel has no pins in the
- * maze, only the three rivets at the exits, so there is nothing to strike.
+ * The classic ball's route: a horizontal roll and a drop, six times over, then
+ * down into a stop. `pegs` is all -1 — the panel has no pins in the maze.
  *
- * @param {(0|1)[]} bits one per row, 1 = step right
- * @returns {{stages:{x:number,y:number}[][], pegs:number[], rest:{x:number,y:number}}}
+ * @param {(0|1)[]} bits one per row, 1 = roll right
  */
 export function classicRoute(bits) {
-  const ys = classicRowYs();
-
-  const stages = [[{ x: C_CENTRE, y: C_ENTRY_Y }, { x: C_CENTRE, y: ys[0] }]];
+  const stages = [[{ x: C_CENTRE, y: C_ENTRY_Y }, { x: C_CENTRE, y: classicRowY(0) }]];
   const kinds = ['entry'];
 
-  // The ball starts on the centre slot and shifts half a step per row. Slots
-  // are tracked in grid units, so a left then a right returns it to exactly
-  // where a right then a left would have — that is the merging, in one line.
-  let slot = 0;
+  let x = C_CENTRE;
   for (let level = 0; level < CLASSIC_ROWS; level++) {
-    const x = classicNodeX(level, slot);
-    slot += (bits[level] ? 0.5 : -0.5) + classicRowOffset(level) - classicRowOffset(level + 1);
-    stages.push(forkPoints(x, ys[level], classicNodeX(level + 1, slot), ys[level + 1], C_STUB));
+    const y = classicRowY(level);
+    const end = x + (bits[level] ? C_RUN : -C_RUN);
+    // Roll the length of the capsule, then fall through to the row below.
+    stages.push([{ x, y }, { x: end, y }, { x: end, y: classicRowY(level + 1) }]);
     kinds.push('fork');
+    x = end;
   }
 
-  const exitX = classicNodeX(CLASSIC_ROWS, slot);
-  const plateTop = C_BIN_BOTTOM - CLASSIC_PLATE.gap - CLASSIC_PLATE.h;
-  const rest = { x: exitX, y: plateTop - classicGrooveMetrics().ballR + 2 };
-  stages.push([{ x: exitX, y: ys[CLASSIC_ROWS] }, rest]);
+  const stop = classicStops().find((b) => {
+    const k = Math.round((x - C_CENTRE) / (2 * C_RUN) + CLASSIC_ROWS / 2);
+    return k >= b.slotStart && k < b.slotStart + b.slotCount;
+  });
+  const rest = { x: stop.x, y: C_STOP_Y - C_STOP_R - classicGrooveMetrics().ballR + 4 };
+  stages.push(toRoutePoints(forkPoints(x, C_LAST_ROW_Y, stop.x, C_STOP_Y, 0.3), rest));
   kinds.push('fall');
 
   return { stages, pegs: stages.map(() => -1), kinds, rest };
+}
+
+/** The routed channel, but stopping short where the ball actually rests. */
+function toRoutePoints(points, rest) {
+  return [...points.slice(0, -1), rest];
 }
 
 /**
