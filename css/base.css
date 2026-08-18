@@ -111,10 +111,16 @@ button:disabled { cursor: default; opacity: 0.45; }
   align-items: center;
   gap: var(--sp-2);
   min-width: 0;
+  /* A button's UA styling is a filled grey slab; none of it is wanted here. */
+  appearance: none;
+  -webkit-appearance: none;
   padding: var(--sp-1) var(--sp-2) var(--sp-1) 0;
+  margin: 0;
   border: 0;
-  background: transparent;
+  background: none;
+  box-shadow: none;
   color: inherit;
+  text-align: left;
   border-radius: var(--r-md);
   transition: opacity var(--dur-ui) ease;
 }

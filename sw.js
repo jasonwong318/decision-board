@@ -1,9 +1,22 @@
 /**
- * Offline support. Everything is static, so we precache the whole app and serve
- * cache-first; the version string is what invalidates an old install.
+ * Offline support.
+ *
+ * Network-first for *everything* same-origin, not just navigations.
+ *
+ * The obvious split — fresh shell, cached assets — is a trap for an app with no
+ * build step and therefore no hashed filenames. `index.html` would come back
+ * new while `js/layout.js` and `css/base.css` came back from the old cache, so
+ * every deploy produced a window where the page was a new shell wired to old
+ * modules: markup for controls whose event handlers did not exist yet, elements
+ * whose styles had not shipped. That is worse than being a version behind,
+ * because it fails in ways that look like bugs in the new code.
+ *
+ * Serving everything the same way removes the skew: whatever the page gets, it
+ * gets consistently. Offline still works — the cache is the fallback, and the
+ * precache covers the whole app.
  */
 
-const VERSION = 'decision-board-v4';
+const VERSION = 'decision-board-v5';
 
 const ASSETS = [
   '.',
@@ -30,8 +43,13 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // addAll is all-or-nothing: a half-written cache would be worse than none.
   event.waitUntil(
-    caches.open(VERSION).then((cache) => cache.addAll(ASSETS)),
+    caches.open(VERSION)
+      .then((cache) => cache.addAll(ASSETS))
+      // Take over straight away rather than idling until every tab has closed,
+      // which is what used to leave people two visits behind a deploy.
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -51,27 +69,18 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
 
-  // Navigations fall back to the cached shell so a shared ?o=... link opens offline.
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(VERSION).then((cache) => cache.put('index.html', copy));
-          return response;
-        })
-        .catch(() => caches.match('index.html')),
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(VERSION).then((cache) => cache.put(request, copy));
-      }
-      return response;
-    })),
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          // A navigation can carry a query string (a shared board); the shell is
+          // what belongs in the cache, not every link someone has opened.
+          const key = request.mode === 'navigate' ? 'index.html' : request;
+          caches.open(VERSION).then((cache) => cache.put(key, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request.mode === 'navigate' ? 'index.html' : request)),
   );
 });

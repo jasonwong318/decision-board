@@ -1,38 +1,35 @@
 /**
- * The classic board's material: red lacquer, brass rivets, ink marks.
+ * The classic board's material: red panel, black milled slots, steel screws.
  *
  * This is neither structure nor theme — it is the object. A physical panel is
  * red under any light, so these values do not change with Ritual or Ivory; only
  * the *page* around the board does.
  *
- * The three printed marks are warm and light because they sit on a dark red
- * panel. The theme-scoped `--cls-*` colours are a separate set, used where the
- * outcome is named against the page instead: the legend and the verdict.
+ * The slots are near-black rather than a dark red. On the real panel they are
+ * cut clean through and read as black against the paint, and that contrast is
+ * most of what makes the thing recognisable.
  */
 
 .app[data-mode="classic"] {
-  --panel-top: #c6172e;
-  --panel-bottom: #9b1022;
-  --panel-edge: rgba(52, 3, 9, 0.55);
-  --panel-inlay: rgba(255, 226, 220, 0.13);
+  --panel-top: #d8253a;
+  --panel-bottom: #b4172a;
+  --panel-edge: rgba(48, 4, 10, 0.5);
+  --panel-inlay: rgba(255, 226, 220, 0.1);
 
-  --wordmark: rgba(36, 3, 8, 0.7);
-  --wordmark-shadow: rgba(255, 214, 205, 0.15);
+  --wordmark: #1b0508;
+  --wordmark-shadow: rgba(255, 190, 180, 0.18);
 
-  --groove: #45070e;
-  --groove-floor: #5d0e17;
-  --groove-sheen: rgba(255, 202, 192, 0.13);
+  --groove: #16090b;
+  --groove-floor: #241014;
+  --groove-sheen: rgba(255, 150, 145, 0.12);
 
-  --peg-hi: #f3e0b4;
-  --peg: #b8975c;
-  --peg-lo: #63502c;
-  --peg-ring: rgba(0, 0, 0, 0.5);
+  --peg-hi: #d9d2c6;
+  --peg: #8d8578;
+  --peg-lo: #3e3830;
+  --peg-ring: rgba(0, 0, 0, 0.55);
 
-  --well-top: #3c060c;
-  --well-bottom: #580d16;
-  --well-edge: rgba(18, 0, 3, 0.5);
-  --bin-text: rgba(255, 232, 226, 0.5);
-  --bin-text-won: #ffffff;
+  --bin-text: #1b0508;
+  --bin-text-won: #fff6e2;
 
   --ball-hi: #fffaef;
   --ball: #d6cfc0;
@@ -44,21 +41,24 @@
 /* The object is square — 40 × 40 — not portrait like the evolved board. */
 .app[data-mode="classic"] .board-wrap { aspect-ratio: 1; max-width: 460px; }
 
-/* Marks on the panel. Fixed, because they are painted onto the red. */
-.app[data-mode="classic"] .bin-no { --mark: #ecd0b8; }
-.app[data-mode="classic"] .bin-again { --mark: #cfc1a7; }
-.app[data-mode="classic"] .bin-yes { --mark: #f2cf74; }
+/* The wordmark is printed, not engraved: bigger, barely tracked, black. */
+.app[data-mode="classic"] .board-wordmark {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 
-.app[data-mode="classic"] .bin-plate { fill: var(--mark); }
-.app[data-mode="classic"] .bin-bloom { fill: var(--mark); }
-.app[data-mode="classic"] .bin.is-won .bin-well { stroke: var(--mark); }
-
-/* ✕ ↻ ✓ are punctuation, not letters — the display serif has no business here. */
+/* ✕ ↻ ✓ are painted on the bare panel below the screws. */
 .bin-glyph {
   font-family: var(--font-ui);
-  font-size: 58px;
+  font-size: 46px;
   font-weight: 500;
   letter-spacing: 0;
 }
+
+/* Landing lights the mark and blooms warm around the screw it rests against. */
+.app[data-mode="classic"] .bin-bloom { fill: #ffcf6a; opacity: 0; }
+.app[data-mode="classic"] .bin.is-won .bin-bloom { opacity: 0.62; }
+.app[data-mode="classic"] .bin.is-won .bin-label { fill: var(--bin-text-won); }
 
 .rivet { pointer-events: none; }
